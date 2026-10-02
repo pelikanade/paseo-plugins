@@ -56,6 +56,7 @@ export function mcpConfig(root: string, binary: string): McpStdioServerConfig {
   return {
     type: "stdio",
     command: process.execPath,
+    env: { ELECTRON_RUN_AS_NODE: "1" },
     args: [
       "--input-type=module",
       "-e",
