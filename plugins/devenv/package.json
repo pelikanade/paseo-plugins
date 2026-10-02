@@ -18,8 +18,7 @@
   "scripts": {
     "typecheck": "tsc --noEmit",
     "build:model": "node verify/build-model.mjs",
-    "verify": "node verify/check-bend.mjs",
-    "test": "node --test tests/*.test.mjs"
+    "verify": "node verify/check-bend.mjs"
   },
   "devDependencies": {
     "@getpaseo/plugin": "0.10.2",

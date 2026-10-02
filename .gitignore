@@ -9,6 +9,7 @@ devenv.local.lock
 node_modules/
 .pnpm-store/
 coverage/
+test-results/
 dist/
 *.tsbuildinfo
 *.tgz

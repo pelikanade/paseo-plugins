@@ -26,16 +26,12 @@ The generator runs Bend in a fresh temporary directory, removes compiler comment
 
 ## What each check establishes
 
-| Check                    | Scope                                                                                                                                                                                                  |
-| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Bend2 native proof check | Symbolic claims over the pure typed root and session models; 54 checked law/proof pairs                                                                                                                |
-| Exhaustive finite traces | All 7,381 root event sequences of length 0–4, session effects along those traces, bridge consistency and an independent transition oracle                                                              |
-| Longer scenarios         | Cold build, timeout, background success, reopen, project change, revocation and retry                                                                                                                  |
-| Model mutations          | Actual Bend proof rejection for ignored revocation, duplicate build eligibility and premature application                                                                                              |
-| Gate mutations           | Missing/wrong Bend, proof escapes, unfinished goals, orphaned proofs and stale JavaScript                                                                                                              |
-| External-effect tests    | Real temporary files and subprocesses, trust paths, filtering, shared cache, timeouts, retries, cancellation, official server/client bundles, MCP, native UI contracts and standalone package contents |
-| Optional real devenv     | A declarative Nix environment captured and used by an actual Node subprocess                                                                                                                           |
+| Check                    | Scope                                                                                                                              |
+| ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------- |
+| Bend2 native proof check | Symbolic claims over the pure typed root and session models; 54 checked law/proof pairs                                            |
+| Generated artifact check | Recompile the committed model and compare the generated JavaScript byte for byte                                                   |
+| Real E2E                 | Isolated Paseo daemon, public RPC and CLI operations, real Web UI, Nix/devenv preparation and actual OpenCode process environments |
 
-Finite traces are bounded checks, not universal liveness proofs. Filesystem observations, Nix evaluation, compiler correctness, operating-system process cleanup and providers honoring injected environment variables are outside the pure model proof. The SDK has no post-startup session acknowledgement: `applied` records a successful environment-returning opening hook, not confirmed provider startup.
+The former finite-trace, mutation and mocked runtime unit suites were removed in favor of [real E2E scenarios](../../../e2e/plugins.e2e.mjs). Filesystem observations, Nix evaluation, compiler correctness, operating-system process cleanup and providers honoring injected environment variables are outside the pure model proof. The SDK has no post-startup session acknowledgement: `applied` records a successful environment-returning opening hook, not confirmed provider startup; E2E separately observes selected environment markers in real provider processes.
 
 `ALL PROOFS CHECK` is Bend2's native check. This gate does not run `--verdict` or claim Lean kernel validation; that separate path requires Lean v4.34.0. No result here proves that an already-running process loses its environment after revocation. Reload is required at that boundary.

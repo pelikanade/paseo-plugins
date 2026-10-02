@@ -13,6 +13,7 @@ Use the [official quickstart](https://paseo.sh/docs/plugins) as the starting poi
 - Install with `pnpm install --frozen-lockfile` for an unchanged checkout. Use `pnpm install` after changing dependencies or adding a plugin, and retain `pnpm-lock.yaml`.
 - Create a plugin with `pnpm plugin:new <id>`. The helper invokes the pinned official CLI under `plugins/<id>`, adapts its examples to the repository's lint rules, formats them, and assigns the private package name `@paseo-plugins/<id>`.
 - Run `pnpm --filter @paseo-plugins/<id> typecheck` while editing. Run `pnpm format` and `pnpm check` before handing off changes.
+- For executable behavior tests, use [../paseo-plugin-e2e/SKILL.md](../paseo-plugin-e2e/SKILL.md). Unit tests are not applicable in this repository; run real E2E tests with `pnpm test:e2e`.
 - Follow `eslint.config.mjs`: source comments are forbidden, promises need handling rather than `void`, switches must be exhaustive, and unsafe type assertions are rejected. Run `pnpm lint` for feedback.
 - Keep each plugin independently installable. Another workspace package is not automatically available when Paseo installs a plugin subdirectory. Include any shared code and runtime dependencies in its distributable package.
 

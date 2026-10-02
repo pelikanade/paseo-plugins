@@ -14,7 +14,8 @@
     "typecheck": "pnpm -r typecheck",
     "lint": "eslint . --max-warnings 0",
     "lint:fix": "eslint . --fix",
-    "test": "node --test scripts/*.test.mjs && pnpm -r --if-present test",
+    "test": "pnpm test:e2e",
+    "test:e2e": "node --test --test-concurrency=1 e2e/*.e2e.mjs",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "verify": "pnpm -r --if-present verify",
@@ -23,6 +24,8 @@
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@getpaseo/cli": "0.10.2",
+    "@getpaseo/client": "0.10.2",
+    "@playwright/test": "1.56.1",
     "eslint": "^10.11.0",
     "prettier": "^3.6.2",
     "typescript": "^5.9.3",

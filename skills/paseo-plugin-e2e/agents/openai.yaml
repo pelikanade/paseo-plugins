@@ -1,0 +1,3 @@
+interface:
+  display_name: "Paseo Plugin E2E"
+  short_description: "Test plugins with a real Paseo daemon and browser"

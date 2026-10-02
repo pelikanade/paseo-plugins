@@ -69,11 +69,10 @@ Settings → devenv 提供以下宿主设置，修改后缓存失效：
 
 ```sh
 pnpm --filter @paseo-plugins/devenv verify
-pnpm --filter @paseo-plugins/devenv test
-PASEO_DEVENV_REAL=1 pnpm --filter @paseo-plugins/devenv exec node --test tests/real.test.mjs
+pnpm test:e2e
 pnpm --filter @paseo-plugins/devenv exec npm pack --dry-run
 ```
 
-常规检查包含真实 25 秒预算测试。可选真实 devenv 测试使用临时项目和独立信任目录；可能需要冷构建。Bend 仅用于开发和验证，Paseo 安装时直接编译包含已提交模型产物的插件源码，无须 Bend。
+行为测试全部使用 E2E：启动隔离的真实 Paseo daemon，通过真实 Web UI、RPC、devenv/Nix 和 OpenCode 进程验证插件。测试需要 Linux、Nix、devenv、Bash、OpenCode 和 Chromium，不再提供单元测试或可选真实测试开关；缺少依赖会失败。测试不发送模型请求，项目、provider 数据与信任目录均为临时目录。失败日志、浏览器截图和 trace 保存在仓库的 `test-results/`。冷构建可能需要数分钟。详见 [E2E skill](../../skills/paseo-plugin-e2e/SKILL.md)。Bend 仅用于开发和静态验证，Paseo 安装时直接编译包含已提交模型产物的插件源码，无须 Bend。
 
-[验证说明](verify/README.md) 区分 Bend2 原生证明检查、有限轨迹检查和外部效果测试；[来源](PROVENANCE.md) 记录参考实现和移植差异。
+[验证说明](verify/README.md) 区分 Bend2 原生证明、产物检查与真实 E2E；[来源](PROVENANCE.md) 记录参考实现和移植差异。
