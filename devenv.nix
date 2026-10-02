@@ -1,4 +1,4 @@
-{ pkgs, ... }:
+{ pkgs, inputs, ... }:
 
 {
   languages.javascript = {
@@ -7,7 +7,10 @@
     pnpm.enable = true;
   };
 
-  packages = [ pkgs.git ];
+  packages = [
+    pkgs.git
+    inputs.bend.packages.${pkgs.stdenv.hostPlatform.system}.default
+  ];
 
   enterTest = ''
     node -e 'if (process.versions.node.split(".")[0] !== "24") process.exit(1)'

@@ -2,3 +2,5 @@
 inputs:
   nixpkgs:
     url: github:cachix/devenv-nixpkgs/rolling
+  bend:
+    url: github:bendlang/bend/b2111cf43244e65f76ddc278ee695e669f720cbf

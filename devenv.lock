@@ -1,5 +1,40 @@
 {
   "nodes": {
+    "bend": {
+      "inputs": {
+        "nixpkgs": "bend-nixpkgs"
+      },
+      "locked": {
+        "lastModified": 1790535267,
+        "narHash": "sha256-rC0s8J97vLLLOcKIMT5GMqEWaEAwS1T0Nus7kdeLaDg=",
+        "owner": "bendlang",
+        "repo": "bend",
+        "rev": "b2111cf43244e65f76ddc278ee695e669f720cbf",
+        "type": "github"
+      },
+      "original": {
+        "owner": "bendlang",
+        "repo": "bend",
+        "rev": "b2111cf43244e65f76ddc278ee695e669f720cbf",
+        "type": "github"
+      }
+    },
+    "bend-nixpkgs": {
+      "locked": {
+        "lastModified": 1790578696,
+        "narHash": "sha256-ZoxIApko70jCdbH3l20HWXOBaT2HZd87orzd2yJ9dVE=",
+        "owner": "NixOS",
+        "repo": "nixpkgs",
+        "rev": "7a0f122f5090cf4c2ade2a13a0e229d4e19ba71f",
+        "type": "github"
+      },
+      "original": {
+        "owner": "NixOS",
+        "ref": "nixos-unstable",
+        "repo": "nixpkgs",
+        "type": "github"
+      }
+    },
     "devenv": {
       "locked": {
         "dir": "src/modules",
@@ -56,7 +91,8 @@
     "root": {
       "inputs": {
         "devenv": "devenv",
-        "nixpkgs": "nixpkgs"
+        "nixpkgs": "nixpkgs",
+        "bend": "bend"
       }
     }
   },

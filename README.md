@@ -19,12 +19,13 @@ With direnv installed, `direnv allow` activates the same shell through `.envrc`.
 ```text
 plugins/
   hello-paseo/                  # Official starter: client surface + daemon RPC
+  devenv/                       # Trust-gated environments + Bend2 policy
 scripts/
   create-plugin.mjs             # Wraps the pinned Paseo scaffold
 skills/
   paseo-plugin-dev/             # Reusable development skill and workflow guide
 .agents/skills/paseo-plugin-dev # Skill discovery link
-devenv.nix                     # Node 24 + pnpm
+devenv.nix                     # Node 24 + pnpm + Bend 2.0.32
 pnpm-workspace.yaml            # Independent plugin packages
 ```
 
@@ -76,19 +77,22 @@ Installation paths refer to the daemon's machine. Paseo compiles plugins on load
 
 ## Commands
 
-| Command                  | Purpose                                                        |
-| ------------------------ | -------------------------------------------------------------- |
-| `pnpm plugin:new <id>`   | Scaffold an independent plugin package                         |
-| `pnpm typecheck`         | Typecheck all plugin packages                                  |
-| `pnpm lint`              | Run strict, type-aware ESLint checks                           |
-| `pnpm lint:fix`          | Apply ESLint's automatic fixes                                 |
-| `pnpm test`              | Verify scaffolding behavior and run package tests when present |
-| `pnpm format`            | Format source, configuration, and Markdown                     |
-| `pnpm check`             | Run typechecking, linting, tests, and formatting checks        |
-| `pnpm exec paseo <args>` | Use the pinned Paseo CLI                                       |
-| `devenv test`            | Verify Node 24, frozen dependency installation, and checks     |
+| Command                  | Purpose                                                         |
+| ------------------------ | --------------------------------------------------------------- |
+| `pnpm plugin:new <id>`   | Scaffold an independent plugin package                          |
+| `pnpm typecheck`         | Typecheck all plugin packages                                   |
+| `pnpm lint`              | Run strict, type-aware ESLint checks                            |
+| `pnpm lint:fix`          | Apply ESLint's automatic fixes                                  |
+| `pnpm test`              | Verify scaffolding behavior and run package tests when present  |
+| `pnpm verify`            | Check Bend2 proofs and committed model artifacts                |
+| `pnpm format`            | Format source, configuration, and Markdown                      |
+| `pnpm check`             | Run typechecking, linting, proofs, tests, and formatting checks |
+| `pnpm exec paseo <args>` | Use the pinned Paseo CLI                                        |
+| `devenv test`            | Verify Node 24, frozen dependency installation, and checks      |
 
 ## Development skill and distribution
+
+The [devenv plugin](plugins/devenv/README.md) adds session environment preparation, trust controls, MCP and native status/settings. Its [verification guide](plugins/devenv/verify/README.md) describes 54 Bend2 laws, bounded traces, model mutations and subprocess tests. Bend is required for repository checks; installed plugins use the committed JavaScript model.
 
 The [ESLint configuration](eslint.config.mjs) follows [AsterisMono/obsidian-agent](https://github.com/AsterisMono/obsidian-agent/blob/main/eslint.config.mjs), with generated environment directories ignored. It enables strict type-aware checks, exhaustive switches, rejects unsafe assertions and unhandled promises (including `void`), and forbids source comments.
 

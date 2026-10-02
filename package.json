@@ -17,7 +17,8 @@
     "test": "node --test scripts/*.test.mjs && pnpm -r --if-present test",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "check": "pnpm typecheck && pnpm lint && pnpm test && pnpm format:check"
+    "verify": "pnpm -r --if-present verify",
+    "check": "pnpm typecheck && pnpm lint && pnpm verify && pnpm test && pnpm format:check"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

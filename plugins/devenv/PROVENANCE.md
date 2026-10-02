@@ -1,0 +1,11 @@
+# Provenance
+
+This plugin ports the devenv behavior in `~/Projects/nvirellias-dsh-nuts/packages/dsh-devenv`, inspected at commit `e46ad8fe3113881ac83984f736c6d29259415dd3`.
+
+The reference supplied nearest-root discovery, devenv trust-store semantics, environment delta capture and filtering, caller precedence, shared project caching, retry/timeout defaults, devenv MCP integration and operating guidance. Its 36 Bend2 root laws are preserved unchanged, together with their proofs and model semantics. The generator and verification gate follow its pinned Bend 2.0.32 toolchain.
+
+Paseo integration is new: separate client/server/shared modules, `agent.create` and `agent.session_open` hooks, a 25-second opening budget with continued background preparation, per-agent application state, reload status, composer pills, native panels/settings, slash commands and Zod RPC contracts. Eighteen additional laws cover session behavior and build eligibility. The model artifact is statically bundled rather than loaded from a computed runtime path.
+
+The appended instructions adapt the reference's skill and references to session-level injection and `PASEO_DEVENV_ROOT` / `PASEO_DEVENV_STATUS`. The reference skill itself derives from [`AsterisMono/flake`](https://github.com/AsterisMono/flake), commit `ee2a5a614397854e9a688876fb32cb2d98985e7f`, path `modules/apps/agent/skills/devenv.md`, base SHA-256 `5e01d82a48922c1fe45321f8d986cab23691c424553376ef5e6a6c6f80ebd972`. The reference records that its author is the same author as that upstream text and redistributes it under the reference repository's MIT terms. This port records that provenance without assigning a license to the surrounding workspace.
+
+Nothing refreshes these sources automatically. Future changes should compare the recorded reference, preserve its inherited claims, and re-run proofs, compilation checks and external-effect tests.
