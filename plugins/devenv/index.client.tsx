@@ -114,7 +114,7 @@ export default function contribute(client: PluginClientContext) {
     client.addSlashCommand({
       name: "devenv-allow",
       description:
-        "Trust this agent’s devenv project, prepare its environment and reload the agent",
+        "Trust this devenv project and its main repository project, prepare and reload the agent",
       argumentHint: "",
       context: "agent",
       onSubmit: async (context) => {

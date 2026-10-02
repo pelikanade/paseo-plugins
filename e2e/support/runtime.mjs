@@ -10,6 +10,7 @@ import {
   readFile,
   readdir,
   rm,
+  symlink,
   writeFile,
 } from "node:fs/promises";
 import { createRequire } from "node:module";
@@ -28,6 +29,7 @@ const { readDaemonInstance, stopDaemonInstance } = cliRequire(
   "@getpaseo/server/daemon-control",
 );
 const cliEntry = join(dirname(cliPackage), "dist/index.js");
+const { WebSocket } = cliRequire("ws");
 
 export async function until(read, accepts, timeout = 30000) {
   const deadline = Date.now() + timeout;
@@ -43,6 +45,7 @@ export async function until(read, accepts, timeout = 30000) {
 }
 
 async function stop(child) {
+  if (child.pid === undefined) return;
   if (child.exitCode !== null || child.signalCode !== null) return;
   const exited = once(child, "exit");
   process.kill(-child.pid, "SIGTERM");
@@ -80,7 +83,7 @@ export async function command(binary, args, options = {}) {
   }
 }
 
-export async function runtime(t) {
+export async function runtime(t, options = {}) {
   assert.equal(process.platform, "linux", "Session E2E requires Linux /proc");
   const temporary = await mkdtemp(join(tmpdir(), "paseo-plugin-e2e-"));
   const home = join(temporary, "daemon");
@@ -148,14 +151,40 @@ export async function runtime(t) {
   await writeFile(
     join(home, "config.json"),
     JSON.stringify({
-      daemon: { listen: "127.0.0.1:0", relay: { enabled: false } },
+      daemon: {
+        listen: options.socket ? join(home, "daemon.sock") : "127.0.0.1:0",
+        relay: { enabled: false },
+      },
       features: { webUi: { enabled: true } },
       agents: { skills: { selection: { mode: "custom", skills: [] } } },
       pluginsEnabled: true,
     }),
   );
+  const daemonTools = join(temporary, "daemon-tools");
+  await mkdir(daemonTools);
+  const linked = new Set(["paseo"]);
+  for (const directory of env.PATH.split(":")) {
+    let names;
+    try {
+      names = await readdir(directory);
+    } catch (error) {
+      if (error.code === "ENOENT") continue;
+      throw error;
+    }
+    await Promise.all(
+      names.map(async (name) => {
+        if (linked.has(name)) return;
+        linked.add(name);
+        await symlink(join(directory, name), join(daemonTools, name));
+      }),
+    );
+  }
+  const daemonEnv = { ...env, PATH: daemonTools };
+  await assert.rejects(command("paseo", ["--version"], { env: daemonEnv }), {
+    code: "ENOENT",
+  });
   child = spawn(process.execPath, [cliEntry, "daemon", "run", "--home", home], {
-    env,
+    env: daemonEnv,
     detached: true,
     stdio: ["ignore", "pipe", "pipe"],
   });
@@ -175,9 +204,15 @@ export async function runtime(t) {
   );
   const url = `http://${instance.listen}`;
   client = new DaemonClient({
-    url: `${url.replace("http", "ws")}/ws`,
+    url: options.socket
+      ? `ws+unix://${instance.listen.replace(/^unix:\/\//, "")}:/ws`
+      : `${url.replace("http", "ws")}/ws`,
     clientId: randomUUID(),
     appVersion: "0.10.2",
+    webSocketFactory: (address, configuration) =>
+      new WebSocket(address, configuration?.protocols, {
+        headers: configuration?.headers,
+      }),
   });
   await client.connect();
   await client.fetchAgents({ subscribe: {} });

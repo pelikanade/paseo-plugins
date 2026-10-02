@@ -19,6 +19,7 @@ export const settingsDefinition = defineSettings({
 });
 export const statusSchema = z.object({
   root: z.string().nullable(),
+  mainRoot: z.string().nullable().default(null),
   status: z
     .enum(["denied", "detected", "loading", "ready", "error"])
     .nullable(),

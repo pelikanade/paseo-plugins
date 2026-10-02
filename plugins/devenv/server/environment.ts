@@ -1,5 +1,5 @@
 import { run } from "./process";
-import { findRoot, isTrusted, signature } from "./project";
+import { findMainProject, findRoot, isTrusted, signature } from "./project";
 import {
   decide,
   isApplied,
@@ -114,6 +114,7 @@ export class Environments {
     if (root === null)
       return {
         root: null,
+        mainRoot: null,
         status: null,
         applied: isApplied(application),
         needsReload: isApplied(application),
@@ -127,6 +128,7 @@ export class Environments {
     const state = this.state(root);
     return {
       root,
+      mainRoot: findMainProject(root),
       status: status(state),
       applied: isApplied(application),
       needsReload: needsReload(state, application, fresh),
@@ -267,15 +269,18 @@ export class Environments {
       Math.min(this.settings.loadTimeoutMs, 25000),
     );
     try {
-      await this.own(
-        run(
-          [this.settings.devenvBin, "allow"],
-          root,
-          process.env,
-          controller.signal,
-          65536,
-        ),
-      );
+      for (const project of [root, findMainProject(root)]) {
+        if (project === null) continue;
+        await this.own(
+          run(
+            [this.settings.devenvBin, "allow"],
+            project,
+            process.env,
+            controller.signal,
+            65536,
+          ),
+        );
+      }
     } finally {
       clearTimeout(timeout);
       this.controllers.delete(controller);

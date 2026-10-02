@@ -155,7 +155,22 @@ function StatusContent({
         </View>
 
         {view?.root && view.status === "denied" ? (
-          <Mono {...appearance}>{view.root}</Mono>
+          <View style={{ gap: 8 }}>
+            <Mono {...appearance}>{view.root}</Mono>
+            <Text style={{ ...body, color: theme.colors.foregroundMuted }}>
+              This uses devenv trust. A previous direnv allow does not grant
+              devenv trust.
+            </Text>
+            {view.mainRoot ? (
+              <View style={{ gap: 4 }}>
+                <Text style={body}>
+                  Allowing this worktree also trusts the corresponding main
+                  repository project. Other worktrees will inherit that trust.
+                </Text>
+                <Mono {...appearance}>{view.mainRoot}</Mono>
+              </View>
+            ) : null}
+          </View>
         ) : null}
 
         {view?.needsReload && !view.autoReload ? (
@@ -203,6 +218,11 @@ function StatusContent({
               hooks? This agent will reload automatically when preparation
               succeeds.
             </Text>
+            {view.mainRoot ? (
+              <Text style={body}>
+                Both project paths shown above will be trusted by devenv.
+              </Text>
+            ) : null}
           </Notice>
         ) : null}
 

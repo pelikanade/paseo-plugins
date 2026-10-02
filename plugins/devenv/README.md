@@ -4,7 +4,7 @@
 
 ## 使用
 
-在 daemon 所在机器准备 Nix、devenv、Bash 和 Paseo CLI。开发仓库使用 Node 24、pnpm 和 Bend 2.0.32：
+在 daemon 所在机器准备 Nix、devenv 和 Bash。自动重载不要求 `PATH` 中安装 Paseo CLI。开发仓库使用 Node 24、pnpm 和 Bend 2.0.32：
 
 ```sh
 devenv shell
@@ -22,7 +22,7 @@ pnpm exec paseo plugin reload devenv
 
 插件从代理 cwd 的真实路径向上寻找最近的 `devenv.nix`，规范化符号链接。未授权项目显示 **untrusted**，不会求值。点击 composer 的 devenv pill 可检查项目路径并授权；显式执行 `/devenv-allow` 则授权当前项目并开始准备。这两种授权方式都会在准备成功后自动重载当前代理，以应用项目环境；后台任务不依赖面板保持打开。`/devenv-status` 打开状态面板，仅查询状态。面板也支持重新准备和刷新。
 
-自动重载使用 daemon 宿主环境中的 Paseo CLI，并通过 `--home` 明确选择 daemon 的 `PASEO_HOME`。可在设置中指定 `paseoBin`。同一代理的重复授权共享进行中的任务；准备失败、信任撤销、项目变化、代理删除或归档时不会重载。重载命令最多等待 60 秒，失败后面板显示错误并保留手动重载指引，状态轮询不会重试。关闭插件会取消准备和重载子进程。通过外部信任文件授权、普通会话的后台准备和手动重新准备仍需用户重载代理。
+自动重载默认通过 Paseo daemon API 执行。插件从 daemon 的 `PASEO_HOME` 读取监听地址和本地凭据，支持 TCP 和本地 socket，不依赖宿主环境中的 `paseo` 命令。将 `paseoBin` 设置为其他值可显式使用自定义 CLI，并通过 `--home` 选择同一 daemon。同一代理的重复授权共享进行中的任务；准备失败、信任撤销、项目变化、代理删除或归档时不会重载。重载最多等待 60 秒，失败后面板显示错误并保留手动重载指引，状态轮询不会重试。关闭插件会取消准备和重载连接或子进程。通过外部信任文件授权、普通会话的后台准备和手动重新准备仍需用户重载代理。
 
 会话最多等待 **25 秒**。超过预算后代理使用宿主环境启动，后台构建继续；环境准备完成后，界面显示 **reload required**。使用 Paseo 的代理重载操作，或运行面板给出的 `paseo agent reload <id>`，使下一次交互会话应用环境。历史会话读取不会构建或改变应用记录。
 
@@ -43,7 +43,11 @@ pnpm exec paseo plugin reload devenv
 
 构建按规范化项目根共享。`devenv.nix`、`devenv.yaml`、`devenv.lock`、`devenv.local.nix`、`devenv.local.yaml` 的时间和大小签名改变后，缓存失效。加载结束和会话注入前再次检查信任及签名。缓存容量满时等待活动构建，随后淘汰已完成条目。失败在重试间隔内不会由会话自动重试；面板的重新准备可显式重试。关闭插件会取消并等待其子进程。
 
-信任文件按 `$DEVENV_HOME/allowed`、`$XDG_DATA_HOME/devenv/allowed`、`$HOME/.local/share/devenv/allowed` 的优先级读取。路径规范化后逐项匹配。Git worktree 会继承主仓库中相同相对路径项目的信任；嵌套的 devenv 项目需要对应的主仓库项目已获信任。插件校验 Git 的双向 worktree 元数据，不修改信任文件，也不在兄弟 worktree 之间传播显式授权。主仓库撤销信任后，继承信任立即失效；worktree 自身的显式授权仍有效。
+信任文件按 `$DEVENV_HOME/allowed`、`$XDG_DATA_HOME/devenv/allowed`、`$HOME/.local/share/devenv/allowed` 的优先级读取。路径规范化后逐项匹配。`direnv allow` 使用独立的信任记录，不等同于 devenv 授权。
+
+通过 devenv pill 或 `/devenv-allow` 授权 Git worktree 时，插件分别运行 `devenv allow`，授权当前 worktree 项目和主仓库中相同相对路径的 devenv 项目。确认界面展示两个项目路径。其他 worktree 随后继承主仓库项目的信任，无须逐个授权。嵌套项目只授权对应的主仓库嵌套项目，不扩大到仓库根。插件校验 Git 的双向 worktree 元数据和主仓库项目目录；找不到有效的对应主项目时仅授权当前项目。单独在终端运行 `devenv allow` 只授权该命令所在项目。
+
+主仓库撤销信任后，其他 worktree 的继承信任立即失效；通过插件授权过的 worktree 自身仍保留显式授权。撤销两者需要分别在各自项目运行 `devenv revoke`。
 
 新 worktree 的环境仍在自身项目根目录求值并独立缓存，MCP 使用相同的信任规则。已信任主仓库的新 worktree 可在第一次会话打开时准备并应用环境，无须重复授权；构建超过 25 秒预算时仍需等待完成后重载代理。
 
@@ -53,17 +57,17 @@ pnpm exec paseo plugin reload devenv
 
 Settings → devenv 提供以下宿主设置，修改后缓存失效：
 
-| 设置              | 默认值                                 |
-| ----------------- | -------------------------------------- |
-| `devenvBin`       | `devenv`                               |
-| `paseoBin`        | `paseo`                                |
-| `loadTimeoutMs`   | `120000`                               |
-| `failureRetryMs`  | `60000`                                |
-| `maxRoots`        | `8`                                    |
-| `maxCaptureBytes` | `8388608`                              |
-| `runtimeDir`      | 空字符串，保留宿主的 `XDG_RUNTIME_DIR` |
+| 设置              | 默认值                                            |
+| ----------------- | ------------------------------------------------- |
+| `devenvBin`       | `devenv`                                          |
+| `paseoBin`        | `paseo`（默认使用 daemon API；其他值为 CLI 覆盖） |
+| `loadTimeoutMs`   | `120000`                                          |
+| `failureRetryMs`  | `60000`                                           |
+| `maxRoots`        | `8`                                               |
+| `maxCaptureBytes` | `8388608`                                         |
+| `runtimeDir`      | 空字符串，保留宿主的 `XDG_RUNTIME_DIR`            |
 
-三个插件 RPC 为 `devenv.status`、`devenv.allow`、`devenv.load`。输入严格验证 `{ agentId: string }`，输出为验证过的 `{ root, status, applied, needsReload, autoReload, error }`。`autoReload` 表示授权后的准备或自动重载任务仍在进行。`status` 只读；`allow` 运行授权并在后台准备，成功后自动重载该代理，`load` 显式重新准备。授权会允许该项目的 Nix 配置以 daemon 用户权限执行。
+三个插件 RPC 为 `devenv.status`、`devenv.allow`、`devenv.load`。输入严格验证 `{ agentId: string }`，输出为验证过的 `{ root, mainRoot, status, applied, needsReload, autoReload, error }`。`mainRoot` 是授权动作同时信任的主仓库项目路径，无有效对应项目时为 `null`。`autoReload` 表示授权后的准备或自动重载任务仍在进行。`status` 只读；`allow` 运行授权并在后台准备，成功后自动重载该代理，`load` 显式重新准备。授权会允许这些项目的 Nix 配置以 daemon 用户权限执行。
 
 ## 验证
 

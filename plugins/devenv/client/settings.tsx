@@ -10,7 +10,11 @@ import type { Settings } from "../shared/contracts";
 
 const fields: { key: keyof Settings; label: string; numeric: boolean }[] = [
   { key: "devenvBin", label: "devenv executable", numeric: false },
-  { key: "paseoBin", label: "Paseo executable", numeric: false },
+  {
+    key: "paseoBin",
+    label: "Reload executable override (paseo uses the daemon API)",
+    numeric: false,
+  },
   { key: "loadTimeoutMs", label: "Build timeout (ms)", numeric: true },
   {
     key: "failureRetryMs",

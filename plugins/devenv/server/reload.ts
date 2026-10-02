@@ -1,11 +1,10 @@
 import type { PluginHookContext } from "@getpaseo/plugin/server";
-import { homedir } from "node:os";
-import { join } from "node:path";
 import { setImmediate } from "node:timers/promises";
 import type { Settings, StatusView } from "../shared/contracts";
 import type { Environments } from "./environment";
 import { run } from "./process";
 import { findRoot } from "./project";
+import { daemonHome, reloadAgent } from "./daemon";
 
 interface Reload {
   controller: AbortController;
@@ -62,20 +61,16 @@ export class TrustReloads {
         controller.abort();
       }, 60000);
       try {
-        await run(
-          [
-            this.settings().paseoBin,
-            "--home",
-            process.env.PASEO_HOME || join(homedir(), ".paseo"),
-            "agent",
-            "reload",
-            agentId,
-          ],
-          current.agent.cwd,
-          process.env,
-          controller.signal,
-          65536,
-        );
+        const binary = this.settings().paseoBin;
+        if (binary === "paseo") await reloadAgent(agentId, controller.signal);
+        else
+          await run(
+            [binary, "--home", daemonHome(), "agent", "reload", agentId],
+            current.agent.cwd,
+            process.env,
+            controller.signal,
+            65536,
+          );
       } finally {
         clearTimeout(timer);
       }

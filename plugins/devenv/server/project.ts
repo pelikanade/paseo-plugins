@@ -59,7 +59,31 @@ export function createTrustCheck(
       current = parent;
     }
   };
-  return (root: string, file: string): boolean => {
+  const linkedProject = (canonical: string) => {
+    const linked = repository(canonical);
+    if (linked === null) return null;
+    const common = fs.realpathSync(
+      path.resolve(
+        linked.directory,
+        fs
+          .readFileSync(path.join(linked.directory, "commondir"), "utf8")
+          .trim(),
+      ),
+    );
+    if (
+      fs.realpathSync(path.dirname(linked.directory)) !==
+        fs.realpathSync(path.join(common, "worktrees")) ||
+      fs.realpathSync(
+        path.resolve(
+          linked.directory,
+          fs.readFileSync(path.join(linked.directory, "gitdir"), "utf8").trim(),
+        ),
+      ) !== fs.realpathSync(linked.git)
+    )
+      return null;
+    return { common, project: path.relative(linked.root, canonical) };
+  };
+  const trusted = (root: string, file: string): boolean => {
     try {
       const canonical = fs.realpathSync(root);
       const allowed = fs
@@ -75,37 +99,15 @@ export function createTrustCheck(
           }
         });
       if (allowed.includes(canonical)) return true;
-      const linked = repository(canonical);
+      const linked = linkedProject(canonical);
       if (linked === null) return false;
-      const common = fs.realpathSync(
-        path.resolve(
-          linked.directory,
-          fs
-            .readFileSync(path.join(linked.directory, "commondir"), "utf8")
-            .trim(),
-        ),
-      );
-      if (
-        fs.realpathSync(path.dirname(linked.directory)) !==
-          fs.realpathSync(path.join(common, "worktrees")) ||
-        fs.realpathSync(
-          path.resolve(
-            linked.directory,
-            fs
-              .readFileSync(path.join(linked.directory, "gitdir"), "utf8")
-              .trim(),
-          ),
-        ) !== fs.realpathSync(linked.git)
-      )
-        return false;
-      const project = path.relative(linked.root, canonical);
       return allowed.some((entry) => {
         try {
           const main = repository(entry);
           return (
             main !== null &&
-            main.directory === common &&
-            path.relative(main.root, entry) === project
+            main.directory === linked.common &&
+            path.relative(main.root, entry) === linked.project
           );
         } catch {
           return false;
@@ -115,10 +117,33 @@ export function createTrustCheck(
       return false;
     }
   };
+  return Object.assign(trusted, {
+    mainProject(root: string): string | null {
+      try {
+        const linked = linkedProject(fs.realpathSync(root));
+        if (linked === null) return null;
+        const main = repository(path.dirname(linked.common));
+        if (main === null || main.directory !== linked.common) return null;
+        const project = fs.realpathSync(path.join(main.root, linked.project));
+        if (
+          !fs.existsSync(path.join(project, "devenv.nix")) ||
+          repository(project)?.directory !== linked.common ||
+          path.relative(main.root, project) !== linked.project
+        )
+          return null;
+        return project;
+      } catch {
+        return null;
+      }
+    },
+  });
 }
 const checkTrust = createTrustCheck(fs, path);
 export function isTrusted(root: string, file = trustPath()): boolean {
   return checkTrust(root, file);
+}
+export function findMainProject(root: string): string | null {
+  return checkTrust.mainProject(root);
 }
 export function signature(root: string): string {
   return projectFiles

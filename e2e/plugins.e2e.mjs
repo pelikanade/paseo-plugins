@@ -70,6 +70,7 @@ test(
         agent = await f.createAgent(project, "Trust E2E");
         assert.deepEqual(await f.status(agent), {
           root: project,
+          mainRoot: null,
           status: "denied",
           applied: false,
           needsReload: false,
@@ -99,7 +100,7 @@ test(
       },
     );
     await f.test(
-      "Paseo Web UI calls Greeting and grants trust, prepares Nix and reloads the real provider",
+      "Paseo Web UI grants trust and reloads the real provider without paseo on the daemon PATH",
       async () => {
         page = await f.openBrowser();
         await page.goto(f.url);
@@ -125,6 +126,7 @@ test(
         await expect(
           page.getByText("Project not trusted", { exact: true }),
         ).toBeVisible();
+        await expect(page.getByText(/A previous direnv allow/)).toBeVisible();
         await page
           .getByRole("button", { name: "Review project trust", exact: true })
           .click();
@@ -275,7 +277,7 @@ test(
       },
     );
     await f.test(
-      "Git worktrees inherit primary trust and inject their own canonical project root",
+      "trusting a worktree also trusts its main project, and sibling worktrees inherit it",
       async () => {
         const git = (args) =>
           command("git", args, { cwd: project, env: f.env });
@@ -301,17 +303,46 @@ test(
         ]);
         const worktree = join(f.temporary, "linked worktree");
         await git(["worktree", "add", "-b", "e2e-worktree", worktree]);
+        await writeFile(join(f.trust, "allowed"), "");
         const linked = await f.createAgent(worktree, "Worktree E2E");
+        const untrusted = await f.status(linked);
+        assert.equal(untrusted.status, "denied");
+        assert.equal(untrusted.mainRoot, project);
+        assert.ok(linked.workspaceId);
+        await page.goto(
+          page
+            .url()
+            .replace(/\/workspace\/[^/?]+/, `/workspace/${linked.workspaceId}`),
+        );
+        await expect(
+          page.getByText("Worktree E2E", { exact: true }).first(),
+        ).toBeVisible();
+        await page.getByText("devenv · untrusted", { exact: true }).click();
+        await expect(
+          page.getByText(/Allowing this worktree also trusts/),
+        ).toBeVisible();
+        await expect(page.getByText(project, { exact: true })).toBeVisible();
+        await page
+          .getByRole("button", { name: "Review project trust", exact: true })
+          .click();
+        await expect(
+          page.getByText(
+            "Both project paths shown above will be trusted by devenv.",
+            { exact: true },
+          ),
+        ).toBeVisible();
+        await page
+          .getByRole("button", { name: "Allow project", exact: true })
+          .click();
         const applied = await until(
           () => f.status(linked),
           (view) => {
             assert.equal(view.error, null);
-            return view.status === "ready";
+            return view.status === "ready" && view.applied && !view.autoReload;
           },
           180000,
         );
         assert.equal(applied.root, worktree);
-        await f.cli(["agent", "reload", linked.id]);
         assert.equal((await f.status(linked)).applied, true);
         await until(
           () => providerEnvironments(f.temporary),
@@ -320,13 +351,108 @@ test(
               (value) => value.root === worktree && value.value === "recovered",
             ),
         );
-        assert.equal(
-          (await readFile(join(f.trust, "allowed"), "utf8")).trim(),
-          project,
+        assert.deepEqual(
+          (await readFile(join(f.trust, "allowed"), "utf8"))
+            .trim()
+            .split("\n")
+            .sort(),
+          [project, worktree].sort(),
         );
+        const sibling = join(f.temporary, "sibling worktree");
+        await git(["worktree", "add", "-b", "e2e-sibling", sibling]);
+        const inherited = await f.createAgent(sibling, "Inherited E2E");
+        const prepared = await until(
+          () => f.status(inherited),
+          (view) => {
+            assert.equal(view.error, null);
+            assert.notEqual(view.status, "denied");
+            return view.status === "ready";
+          },
+          180000,
+        );
+        if (!prepared.applied) await f.cli(["agent", "reload", inherited.id]);
+        await until(
+          () => providerEnvironments(f.temporary),
+          (values) =>
+            values.some(
+              (value) => value.root === sibling && value.value === "recovered",
+            ),
+        );
+        await writeFile(join(f.trust, "allowed"), `${worktree}\n`);
+        assert.equal((await f.status(inherited)).status, "denied");
+        assert.equal((await f.status(inherited)).needsReload, true);
+        assert.equal((await f.status(linked)).status, "ready");
+        assert.equal((await f.status(linked)).needsReload, false);
+        await f.client.deleteAgent(inherited.id);
+        await f.client.deleteAgent(linked.id);
+      },
+    );
+    await f.test(
+      "nested worktree trust grants only the matching main project",
+      async () => {
+        const nested = join(project, "nested");
+        await mkdir(nested);
+        for (const file of ["devenv.yaml", "devenv.lock"])
+          await cp(join(root, file), join(nested, file));
+        await writeFile(join(nested, "devenv.nix"), nix("nested"));
+        const git = (args) =>
+          command("git", args, { cwd: project, env: f.env });
+        await git(["add", "nested"]);
+        await git([
+          "-c",
+          "user.name=E2E",
+          "-c",
+          "user.email=e2e@example.invalid",
+          "commit",
+          "-m",
+          "Nested E2E project",
+        ]);
+        const worktree = join(f.temporary, "nested worktree");
+        await git(["worktree", "add", "-b", "e2e-nested", worktree]);
+        const child = join(worktree, "nested");
         await writeFile(join(f.trust, "allowed"), "");
-        assert.equal((await f.status(linked)).status, "denied");
-        assert.equal((await f.status(linked)).needsReload, true);
+        const linked = await f.createAgent(child, "Nested E2E");
+        assert.equal((await f.status(linked)).mainRoot, nested);
+        await f.rpc("devenv", "devenv.allow", { agentId: linked.id });
+        await until(
+          () => f.status(linked),
+          (view) => {
+            assert.equal(view.error, null);
+            return view.applied && !view.autoReload;
+          },
+          180000,
+        );
+        await until(
+          () => providerEnvironments(f.temporary),
+          (values) =>
+            values.some(
+              (value) => value.root === child && value.value === "nested",
+            ),
+        );
+        assert.deepEqual(
+          (await readFile(join(f.trust, "allowed"), "utf8"))
+            .trim()
+            .split("\n")
+            .sort(),
+          [child, nested].sort(),
+        );
+        assert.equal((await f.status(agent)).status, "denied");
+        const sibling = join(f.temporary, "nested sibling");
+        await git(["worktree", "add", "-b", "e2e-nested-sibling", sibling]);
+        const inherited = await f.createAgent(join(sibling, "nested"));
+        await until(
+          () => f.status(inherited),
+          (view) => {
+            assert.equal(view.error, null);
+            assert.notEqual(view.status, "denied");
+            return view.status === "ready";
+          },
+          180000,
+        );
+        await writeFile(join(f.trust, "allowed"), `${child}\n`);
+        assert.equal((await f.status(inherited)).status, "denied");
+        assert.equal((await f.status(linked)).status, "ready");
+        await f.client.deleteAgent(inherited.id);
         await f.client.deleteAgent(linked.id);
       },
     );
