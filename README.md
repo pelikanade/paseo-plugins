@@ -30,6 +30,17 @@ pnpm-workspace.yaml            # Independent plugin packages
 
 Each plugin keeps its own manifest, TypeScript configuration, dependencies, and `client/`, `server/`, and `shared/` directories. Keep distributable plugin code inside its package so installation from a subdirectory works independently of this workspace.
 
+## Paseo worktree lifecycle
+
+The root `paseo.json` configures [Paseo worktree hooks](https://paseo.sh/docs/worktrees.md):
+
+- **Setup:** `bash scripts/worktree-setup.sh` enters devenv and installs dependencies with `pnpm install --frozen-lockfile`.
+- **Teardown:** `bash scripts/worktree-teardown.sh` removes the worktree's root and plugin `node_modules`, `.devenv`, and `.direnv`. It refuses to run in the primary checkout and skips symlinked plugin directories.
+
+The daemon machine needs Nix and devenv available on its `PATH`. Both hooks resolve the checkout from their own script location, so they can also be invoked from another directory. Teardown can be repeated; Paseo removes the worktree directory after it completes.
+
+Commit `paseo.json` and these scripts to the base branch used for new worktrees. Paseo reads that committed version, so uncommitted lifecycle changes do not apply to newly created worktrees.
+
 ## Add and edit plugins
 
 ```sh
