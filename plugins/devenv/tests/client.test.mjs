@@ -373,12 +373,38 @@ test("native status labels, preparation, session state and trust actions stay di
       assert.equal(prepare.props.accessibilityState.busy, true);
     }
   }
+  for (const status of ["loading", "ready"]) {
+    state.view = {
+      ...state.view,
+      root: "/project",
+      status,
+      applied: false,
+      needsReload: true,
+      autoReload: true,
+      error: null,
+    };
+    const tree = render({ type: panel.Component, props });
+    assert.match(strings(tree), /reload automatically/);
+    assert.doesNotMatch(strings(tree), /paseo agent reload/);
+    const action = find(
+      tree,
+      (node) =>
+        node.type === "Pressable" &&
+        strings(node) ===
+          (status === "ready" ? "Reloading agent…" : "Preparing environment…"),
+    );
+    assert.equal(action.props.disabled, true);
+    assert.equal(action.props.accessibilityState.busy, true);
+    if (status === "ready")
+      assert.equal(api.statusLabel(state.view), "devenv · reloading");
+  }
   state.view = {
     ...state.view,
     root: "/project",
     status: "denied",
     applied: false,
     needsReload: false,
+    autoReload: false,
     error: null,
   };
   state.uiHooks = [];

@@ -313,7 +313,10 @@ test("compiled hooks preserve creation configuration, skip history, validate RPC
     registerSettings: () => ({
       read: async () => ({
         status: "ready",
-        values: api.settingsSchema.parse({ devenvBin: f.binary }),
+        values: api.settingsSchema.parse({
+          devenvBin: f.binary,
+          paseoBin: f.binary,
+        }),
       }),
       subscribe: () => () => {
         disposed++;

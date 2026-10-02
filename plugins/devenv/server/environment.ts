@@ -107,7 +107,7 @@ export class Environments {
       root,
     );
   }
-  view(agentId: string, cwd: string): StatusView {
+  view(agentId: string, cwd: string): Omit<StatusView, "autoReload"> {
     const root = findRoot(cwd);
     const session = this.sessions.get(agentId);
     const application: Application = session?.application ?? { $: "Host" };

@@ -24,6 +24,14 @@ export function describe(view: StatusView | undefined): Presentation {
       headline: "Loading devenv status…",
       summary: "",
     };
+  if (view.autoReload)
+    return {
+      tone: "accent",
+      headline:
+        view.status === "ready" ? "Reloading agent" : "Preparing environment",
+      summary:
+        "This agent will reload automatically when the trusted project environment is ready.",
+    };
   if (view.needsReload)
     return {
       tone: "warning",

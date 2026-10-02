@@ -158,7 +158,7 @@ function StatusContent({
           <Mono {...appearance}>{view.root}</Mono>
         ) : null}
 
-        {view?.needsReload ? (
+        {view?.needsReload && !view.autoReload ? (
           <Notice theme={theme} tone="warning" title="Update this session">
             <Text style={body}>
               {view.root === null || view.status === "denied"
@@ -200,7 +200,8 @@ function StatusContent({
           >
             <Text style={body}>
               Allow this project to execute its devenv configuration and build
-              hooks?
+              hooks? This agent will reload automatically when preparation
+              succeeds.
             </Text>
           </Notice>
         ) : null}
@@ -248,12 +249,14 @@ function StatusContent({
                   ? "primary"
                   : "secondary"
               }
-              disabled={busy || view.status === "loading"}
-              busy={busy || view.status === "loading"}
+              disabled={busy || view.status === "loading" || view.autoReload}
+              busy={busy || view.status === "loading" || view.autoReload}
               label={
-                busy || view.status === "loading"
-                  ? "Preparing environment…"
-                  : "Reload environment"
+                view.autoReload && view.status === "ready"
+                  ? "Reloading agent…"
+                  : busy || view.status === "loading"
+                    ? "Preparing environment…"
+                    : "Reload environment"
               }
               onPress={() => {
                 perform(false).catch(console.error);

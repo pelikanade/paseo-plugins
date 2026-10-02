@@ -4,7 +4,7 @@
 
 ## 使用
 
-在 daemon 所在机器准备 Nix、devenv 和 Bash。开发仓库使用 Node 24、pnpm 和 Bend 2.0.32：
+在 daemon 所在机器准备 Nix、devenv、Bash 和 Paseo CLI。开发仓库使用 Node 24、pnpm 和 Bend 2.0.32：
 
 ```sh
 devenv shell
@@ -20,7 +20,9 @@ pnpm exec paseo plugin install "$PWD/plugins/devenv"
 pnpm exec paseo plugin reload devenv
 ```
 
-插件从代理 cwd 的真实路径向上寻找最近的 `devenv.nix`，规范化符号链接。未授权项目显示 **untrusted**，不会求值。点击 composer 的 devenv pill 可检查项目路径并授权；显式执行 `/devenv-allow` 则授权当前项目并开始准备。`/devenv-status` 打开状态面板，仅查询状态。面板也支持重新准备和刷新。
+插件从代理 cwd 的真实路径向上寻找最近的 `devenv.nix`，规范化符号链接。未授权项目显示 **untrusted**，不会求值。点击 composer 的 devenv pill 可检查项目路径并授权；显式执行 `/devenv-allow` 则授权当前项目并开始准备。这两种授权方式都会在准备成功后自动重载当前代理，以应用项目环境；后台任务不依赖面板保持打开。`/devenv-status` 打开状态面板，仅查询状态。面板也支持重新准备和刷新。
+
+自动重载使用 daemon 宿主环境中的 Paseo CLI，并通过 `--home` 明确选择 daemon 的 `PASEO_HOME`。可在设置中指定 `paseoBin`。同一代理的重复授权共享进行中的任务；准备失败、信任撤销、项目变化、代理删除或归档时不会重载。重载命令最多等待 60 秒，失败后面板显示错误并保留手动重载指引，状态轮询不会重试。关闭插件会取消准备和重载子进程。通过外部信任文件授权、普通会话的后台准备和手动重新准备仍需用户重载代理。
 
 会话最多等待 **25 秒**。超过预算后代理使用宿主环境启动，后台构建继续；环境准备完成后，界面显示 **reload required**。使用 Paseo 的代理重载操作，或运行面板给出的 `paseo agent reload <id>`，使下一次交互会话应用环境。历史会话读取不会构建或改变应用记录。
 
@@ -52,13 +54,14 @@ Settings → devenv 提供以下宿主设置，修改后缓存失效：
 | 设置              | 默认值                                 |
 | ----------------- | -------------------------------------- |
 | `devenvBin`       | `devenv`                               |
+| `paseoBin`        | `paseo`                                |
 | `loadTimeoutMs`   | `120000`                               |
 | `failureRetryMs`  | `60000`                                |
 | `maxRoots`        | `8`                                    |
 | `maxCaptureBytes` | `8388608`                              |
 | `runtimeDir`      | 空字符串，保留宿主的 `XDG_RUNTIME_DIR` |
 
-三个插件 RPC 为 `devenv.status`、`devenv.allow`、`devenv.load`。输入严格验证 `{ agentId: string }`，输出为验证过的 `{ root, status, applied, needsReload, error }`。`status` 只读；`allow` 运行授权并在后台准备，`load` 显式重新准备。授权会允许该项目的 Nix 配置以 daemon 用户权限执行。
+三个插件 RPC 为 `devenv.status`、`devenv.allow`、`devenv.load`。输入严格验证 `{ agentId: string }`，输出为验证过的 `{ root, status, applied, needsReload, autoReload, error }`。`autoReload` 表示授权后的准备或自动重载任务仍在进行。`status` 只读；`allow` 运行授权并在后台准备，成功后自动重载该代理，`load` 显式重新准备。授权会允许该项目的 Nix 配置以 daemon 用户权限执行。
 
 ## 验证
 

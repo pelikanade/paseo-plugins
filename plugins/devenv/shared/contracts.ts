@@ -3,6 +3,7 @@ import { z } from "zod";
 
 export const settingsSchema = z.object({
   devenvBin: z.string().trim().min(1).default("devenv"),
+  paseoBin: z.string().trim().min(1).default("paseo"),
   loadTimeoutMs: z.number().int().positive().default(120000),
   failureRetryMs: z.number().int().nonnegative().default(60000),
   runtimeDir: z.string().default(""),
@@ -23,6 +24,7 @@ export const statusSchema = z.object({
     .nullable(),
   applied: z.boolean(),
   needsReload: z.boolean(),
+  autoReload: z.boolean().default(false),
   error: z.string().nullable(),
 });
 export type StatusView = z.infer<typeof statusSchema>;
@@ -44,6 +46,7 @@ export const loadRpc = defineRpc({
 });
 
 export function statusLabel(view: StatusView): string {
+  if (view.autoReload && view.status === "ready") return "devenv · reloading";
   if (view.needsReload) return "devenv · reload required";
   if (view.applied) return "devenv · applied";
   switch (view.status) {
