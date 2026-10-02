@@ -41,7 +41,9 @@ pnpm exec paseo plugin reload devenv
 
 构建按规范化项目根共享。`devenv.nix`、`devenv.yaml`、`devenv.lock`、`devenv.local.nix`、`devenv.local.yaml` 的时间和大小签名改变后，缓存失效。加载结束和会话注入前再次检查信任及签名。缓存容量满时等待活动构建，随后淘汰已完成条目。失败在重试间隔内不会由会话自动重试；面板的重新准备可显式重试。关闭插件会取消并等待其子进程。
 
-信任文件按 `$DEVENV_HOME/allowed`、`$XDG_DATA_HOME/devenv/allowed`、`$HOME/.local/share/devenv/allowed` 的优先级读取。路径规范化后逐项匹配；不自动授权。
+信任文件按 `$DEVENV_HOME/allowed`、`$XDG_DATA_HOME/devenv/allowed`、`$HOME/.local/share/devenv/allowed` 的优先级读取。路径规范化后逐项匹配。Git worktree 会继承主仓库中相同相对路径项目的信任；嵌套的 devenv 项目需要对应的主仓库项目已获信任。插件校验 Git 的双向 worktree 元数据，不修改信任文件，也不在兄弟 worktree 之间传播显式授权。主仓库撤销信任后，继承信任立即失效；worktree 自身的显式授权仍有效。
+
+新 worktree 的环境仍在自身项目根目录求值并独立缓存，MCP 使用相同的信任规则。已信任主仓库的新 worktree 可在第一次会话打开时准备并应用环境，无须重复授权；构建超过 25 秒预算时仍需等待完成后重载代理。
 
 环境在会话层生效。代理切换命令 cwd 后仍使用同一会话环境；另一项目应使用另一代理。新代理保留已有 `systemPrompt`，追加 devenv 操作说明，并获得信任检查后的 `devenv mcp` 启动配置。已有同名 MCP 配置优先。技能说明通过代理提示交付，MCP 配置在创建时交付；已有代理重载仍能获得环境。
 
