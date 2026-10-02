@@ -1,0 +1,8 @@
+packages:
+  - plugins/*
+
+allowBuilds:
+  esbuild: true
+  # Optional native modules for the daemon, unused by plugin development commands.
+  msgpackr-extract: false
+  node-pty: false

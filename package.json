@@ -1,0 +1,30 @@
+{
+  "name": "paseo-plugins",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@11.25.0",
+  "engines": {
+    "node": ">=24 <25",
+    "pnpm": ">=11 <12"
+  },
+  "scripts": {
+    "plugin:new": "node scripts/create-plugin.mjs",
+    "paseo": "paseo",
+    "typecheck": "pnpm -r typecheck",
+    "lint": "eslint . --max-warnings 0",
+    "lint:fix": "eslint . --fix",
+    "test": "node --test scripts/*.test.mjs && pnpm -r --if-present test",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "check": "pnpm typecheck && pnpm lint && pnpm test && pnpm format:check"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@getpaseo/cli": "0.10.2",
+    "eslint": "^10.11.0",
+    "prettier": "^3.6.2",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.70.1"
+  }
+}

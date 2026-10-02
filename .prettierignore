@@ -1,0 +1,8 @@
+.devenv/
+.direnv/
+node_modules/
+pnpm-lock.yaml
+devenv.lock
+dist/
+coverage/
+*.tgz

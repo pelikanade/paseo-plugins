@@ -1,0 +1,20 @@
+# Development environment
+.devenv/
+.direnv/
+devenv.local.nix
+devenv.local.yaml
+devenv.local.lock
+
+# Node and generated artifacts
+node_modules/
+.pnpm-store/
+coverage/
+dist/
+*.tsbuildinfo
+*.tgz
+
+# Local configuration
+.env
+.env.*
+!.env.example
+.DS_Store

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Paseo Plugin Development"
+  short_description: "Build and debug Paseo plugins in this monorepo"
+  default_prompt: "Use $paseo-plugin-dev to create or update a Paseo plugin in this repository."
