@@ -1,0 +1,79 @@
+{
+  "cardId": "component-gallery",
+  "spec": {
+    "root": "card",
+    "state": { "data": { "count": 12, "progress": 0.75, "enabled": true } },
+    "elements": {
+      "card": {
+        "type": "Card",
+        "props": { "title": "Component gallery" },
+        "children": [
+          "heading",
+          "body",
+          "row",
+          "divider",
+          "metric",
+          "badge",
+          "progress",
+          "fact"
+        ]
+      },
+      "heading": {
+        "type": "Heading",
+        "props": { "text": "Readable results" },
+        "children": []
+      },
+      "body": {
+        "type": "Text",
+        "props": { "text": "Readable body · 可复制的内容" },
+        "children": []
+      },
+      "row": {
+        "type": "Stack",
+        "props": { "direction": "row", "gap": "lg" },
+        "children": ["left", "right"]
+      },
+      "left": {
+        "type": "Text",
+        "props": { "text": "Left column" },
+        "children": []
+      },
+      "right": {
+        "type": "Text",
+        "props": { "text": "Right column" },
+        "children": []
+      },
+      "divider": { "type": "Divider", "props": {}, "children": [] },
+      "metric": {
+        "type": "Metric",
+        "props": {
+          "label": "Matching records",
+          "value": { "$state": "/data/count" },
+          "detail": "Verified records"
+        },
+        "children": []
+      },
+      "badge": {
+        "type": "Badge",
+        "props": { "label": "Healthy status", "tone": "success" },
+        "children": []
+      },
+      "progress": {
+        "type": "Progress",
+        "props": {
+          "label": "Indexing progress",
+          "value": { "$state": "/data/progress" }
+        },
+        "children": []
+      },
+      "fact": {
+        "type": "KeyValue",
+        "props": {
+          "label": "Feature enabled",
+          "value": { "$state": "/data/enabled" }
+        },
+        "children": []
+      }
+    }
+  }
+}

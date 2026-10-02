@@ -1,0 +1,7 @@
+{
+  "id": "generative-ui",
+  "description": "Native generative UI cards, forms and streamed components in Chat, with an agent skill and scoped MCP tools.",
+  "requirements": {
+    "paseo": ">=0.10.2"
+  }
+}

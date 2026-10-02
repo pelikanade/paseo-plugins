@@ -20,6 +20,7 @@ With direnv installed, `direnv allow` activates the same shell through `.envrc`.
 plugins/
   hello-paseo/                  # Official starter: client surface + daemon RPC
   devenv/                       # Trust-gated environments + Bend2 policy
+  generative-ui/                # Native Chat cards + scoped MCP + agent skill
 scripts/
   create-plugin.mjs             # Wraps the pinned Paseo scaffold
 skills/
@@ -86,6 +87,8 @@ pnpm test:e2e
 
 The session scenarios require Linux `/proc`, Nix, devenv, Bash and a real OpenCode executable on `PATH`. They create sessions without sending model turns and inspect selected marker variables in actual OpenCode server processes. Tests use temporary daemon, project, provider data/config/cache and trust directories, and disable the relay. They never install plugins into the user's daemon or alter the user's project trust. Cold Nix builds can take minutes. Missing prerequisites fail the suite.
 
+The [generative-ui scenario](e2e/generative-ui.e2e.mjs) uses the real MCP transport and Web UI to publish cards, apply patches, edit form controls, submit to the same agent and reload the plugin. Submission starts an actual OpenCode turn; the assertion checks delivery of the user message and does not depend on a particular model response.
+
 Failure diagnostics are saved under ignored `test-results/`, including daemon logs, browser logs, screenshots and Playwright traces. Inspect a trace with `pnpm exec playwright show-trace test-results/<run>/trace.zip`.
 
 ## Commands
@@ -106,6 +109,8 @@ Failure diagnostics are saved under ignored `test-results/`, including daemon lo
 ## Development skill and distribution
 
 The [devenv plugin](plugins/devenv/README.md) adds session environment preparation, trust controls, MCP and native status/settings. Its [verification guide](plugins/devenv/verify/README.md) describes 54 Bend2 laws and generated-artifact checks. Bend is required for repository checks; installed plugins use the committed JavaScript model. The [E2E skill](skills/paseo-plugin-e2e/SKILL.md) explains the real daemon and browser workflow and is discoverable through `.agents/skills/paseo-plugin-e2e`.
+
+The [generative-ui plugin](plugins/generative-ui/README.md) adds native json-render cards and forms to Chat. Its bundled [agent skill](plugins/generative-ui/skills/generative-ui/SKILL.md) describes the component catalog, streamed inline protocol and submission workflow. New agents receive scoped MCP tools; existing conversations can use `/ui`.
 
 The [ESLint configuration](eslint.config.mjs) follows [AsterisMono/obsidian-agent](https://github.com/AsterisMono/obsidian-agent/blob/main/eslint.config.mjs), with generated environment directories ignored. It enables strict type-aware checks, exhaustive switches, rejects unsafe assertions and unhandled promises (including `void`), and forbids source comments.
 

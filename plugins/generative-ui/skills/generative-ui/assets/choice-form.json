@@ -1,0 +1,49 @@
+{
+  "cardId": "implementation-choice",
+  "spec": {
+    "root": "card",
+    "state": { "form": { "scope": "core", "notes": "", "mobile": true } },
+    "elements": {
+      "card": {
+        "type": "Card",
+        "props": { "title": "Implementation preferences" },
+        "children": ["scope", "notes", "mobile", "submit"]
+      },
+      "scope": {
+        "type": "ChoiceGroup",
+        "props": {
+          "label": "Scope",
+          "value": { "$bindState": "/form/scope" },
+          "options": [
+            { "value": "core", "label": "Core flow" },
+            { "value": "extended", "label": "Include extensions" }
+          ]
+        },
+        "children": []
+      },
+      "notes": {
+        "type": "TextInput",
+        "props": {
+          "label": "Notes",
+          "value": { "$bindState": "/form/notes" },
+          "maxLength": 500
+        },
+        "children": []
+      },
+      "mobile": {
+        "type": "Checkbox",
+        "props": {
+          "label": "Mobile support",
+          "checked": { "$bindState": "/form/mobile" }
+        },
+        "children": []
+      },
+      "submit": {
+        "type": "Button",
+        "props": { "label": "Submit preferences" },
+        "on": { "press": { "action": "submit", "params": {} } },
+        "children": []
+      }
+    }
+  }
+}

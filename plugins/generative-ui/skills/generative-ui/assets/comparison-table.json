@@ -1,0 +1,25 @@
+{
+  "cardId": "approach-comparison",
+  "spec": {
+    "root": "card",
+    "state": {},
+    "elements": {
+      "card": {
+        "type": "Card",
+        "props": { "title": "Compare approaches" },
+        "children": ["table"]
+      },
+      "table": {
+        "type": "Table",
+        "props": {
+          "columns": ["Approach", "Use"],
+          "rows": [
+            ["Inline stream", "Progressive answers"],
+            ["MCP cards", "Persistent updates"]
+          ]
+        },
+        "children": []
+      }
+    }
+  }
+}
