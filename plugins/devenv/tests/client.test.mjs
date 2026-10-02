@@ -5,7 +5,21 @@ import { artifacts, evaluate, require, until } from "./harness.mjs";
 const { api, clientBundle } = await artifacts();
 function clientModule(state) {
   return evaluate(clientBundle, (name) => {
-    if (name === "react") return { useState: (value) => [value, () => {}] };
+    if (name === "react")
+      return {
+        useState: (value) => {
+          if (!state.uiHooks) return [value, () => {}];
+          const index = state.hookIndex++;
+          if (!Object.hasOwn(state.uiHooks, index))
+            state.uiHooks[index] = value;
+          return [
+            state.uiHooks[index],
+            (next) => {
+              state.uiHooks[index] = next;
+            },
+          ];
+        },
+      };
     if (name === "react/jsx-runtime")
       return {
         jsx: (type, props) => ({ type, props }),
@@ -22,12 +36,19 @@ function clientModule(state) {
     if (name === "@getpaseo/plugin/client")
       return {
         useAgent: (id, selector) => selector({ updatedAt: "today" }),
-        useRpc: () => async () => state.view,
+        useRpc: (contract) => async (input) =>
+          state.onRpc ? state.onRpc(contract, input) : state.view,
         useSettings: () => state.settings,
       };
+    if (name === "@getpaseo/plugin/client/react-native")
+      return { Icon: "Icon", ScrollView: "ScrollView" };
     if (name === "@tanstack/react-query")
       return {
-        useQuery: () => ({ data: state.view }),
+        useQuery: () => ({
+          data: state.view,
+          error: state.queryError,
+          isFetching: state.isFetching ?? false,
+        }),
         useQueryClient: () => ({ invalidateQueries: async () => {} }),
       };
     assert.ok(!name.startsWith("node:"), name);
@@ -49,11 +70,29 @@ function strings(node) {
   if (Array.isArray(node)) return node.map(strings).join("\n");
   return node && typeof node === "object" ? strings(node.props?.children) : "";
 }
+function find(node, predicate) {
+  if (Array.isArray(node)) {
+    for (const child of node) {
+      const match = find(child, predicate);
+      if (match) return match;
+    }
+  } else if (node && typeof node === "object") {
+    if (predicate(node)) return node;
+    return find(node.props?.children, predicate);
+  }
+}
 const theme = {
   colors: {
     foreground: "black",
+    foregroundMuted: "gray",
+    surface0: "white",
     surface1: "white",
+    surface2: "lightgray",
     border: "gray",
+    accent: "blue",
+    accentForeground: "white",
+    statusSuccess: "green",
+    statusWarning: "orange",
     statusDanger: "red",
   },
 };
@@ -158,6 +197,17 @@ test("compiled client registers native surfaces, paginates agents, tracks status
   await until(() => pills.get("second")?.button.label === "devenv · untrusted");
   assert.equal(pages, 2);
   assert.ok(pills.get("agent").button.visible);
+  const untrustedIcon = pills.get("agent").button.icon;
+  assert.equal(typeof untrustedIcon, "function");
+  assert.match(
+    JSON.stringify(
+      render({
+        type: untrustedIcon,
+        props: { ...props, size: 16, color: "black" },
+      }),
+    ),
+    /orange/,
+  );
   const commandContext = {
     context: "agent",
     agent,
@@ -189,6 +239,15 @@ test("compiled client registers native surfaces, paginates agents, tracks status
   state.view = { ...state.view, applied: true, needsReload: false };
   listener({ kind: "upsert", agent });
   await until(() => pills.get("agent").button.label === "devenv · applied");
+  assert.notEqual(pills.get("agent").button.icon, untrustedIcon);
+  state.view = {
+    ...state.view,
+    applied: false,
+    needsReload: false,
+    status: "denied",
+  };
+  listener({ kind: "upsert", agent });
+  await until(() => pills.get("agent").button.icon === untrustedIcon);
   listener({ kind: "remove", agentId: "second" });
   assert.equal(pills.get("second").removed, true);
   await cleanup();
@@ -196,7 +255,7 @@ test("compiled client registers native surfaces, paginates agents, tracks status
   assert.equal(removed, 6);
   assert.equal(pills.get("agent").removed, true);
 });
-test("native status labels and settings render prepared and applied states separately", () => {
+test("native status labels, preparation, session state and trust actions stay distinct", async () => {
   for (const [status, applied, needsReload, label] of [
     ["ready", false, true, "reload required"],
     ["ready", false, false, "prepared"],
@@ -254,5 +313,130 @@ test("native status labels and settings render prepared and applied states separ
     strings(render({ type: panel.Component, props })),
     /Review project trust/,
   );
-  return cleanup();
+  for (const [status, applied, needsReload, headline, detail] of [
+    ["detected", false, false, "Project detected", "has not been prepared"],
+    [
+      "loading",
+      false,
+      false,
+      "Preparing environment",
+      "Status updates automatically",
+    ],
+    ["ready", false, false, "Environment prepared", "has not been applied"],
+    [
+      "ready",
+      true,
+      false,
+      "Environment applied",
+      "running with the project environment",
+    ],
+    [
+      "loading",
+      true,
+      true,
+      "Reload required",
+      "updated environment is preparing",
+    ],
+    ["error", true, true, "Reload required", "preparation failed"],
+    ["denied", true, true, "Reload required", "trust was revoked"],
+    [null, false, false, "No devenv project", "No devenv.nix found"],
+    [null, true, true, "Reload required", "no longer available"],
+  ]) {
+    state.view = {
+      ...state.view,
+      root: status === null ? null : "/project",
+      status,
+      applied,
+      needsReload,
+      error: status === "error" ? "Build failed" : null,
+    };
+    const tree = render({ type: panel.Component, props });
+    const text = strings(tree);
+    assert.ok(text.includes(headline), text);
+    assert.ok(text.includes(detail), text);
+    assert.doesNotMatch(text, /PROJECT|Preparation\n|Session\n/);
+    if (needsReload) assert.ok(text.includes("paseo agent reload agent"), text);
+    if (status === "error") {
+      assert.ok(text.includes("Build failed"));
+      assert.ok(
+        find(tree, (node) => node.props?.accessibilityRole === "alert"),
+      );
+    }
+    if (status === "loading") {
+      const prepare = find(
+        tree,
+        (node) =>
+          node.type === "Pressable" &&
+          strings(node) === "Preparing environment…",
+      );
+      assert.equal(prepare.props.disabled, true);
+      assert.equal(prepare.props.accessibilityState.busy, true);
+    }
+  }
+  state.view = {
+    ...state.view,
+    root: "/project",
+    status: "denied",
+    applied: false,
+    needsReload: false,
+    error: null,
+  };
+  state.uiHooks = [];
+  const calls = [];
+  state.onRpc = (contract, input) => {
+    calls.push({ name: contract.name, input });
+    return state.view;
+  };
+  const statusTree = () => {
+    state.hookIndex = 0;
+    return render({ type: panel.Component, props });
+  };
+  const button = (label) =>
+    find(
+      statusTree(),
+      (node) => node.type === "Pressable" && strings(node) === label,
+    );
+  button("Review project trust").props.onPress();
+  assert.equal(calls.length, 0);
+  assert.ok(strings(statusTree()).includes("Allow this project to run code?"));
+  assert.equal(strings(statusTree()).split("/project").length - 1, 1);
+  assert.equal(button("Refresh status"), undefined);
+  button("Cancel").props.onPress();
+  assert.equal(calls.length, 0);
+  assert.ok(button("Review project trust"));
+  button("Review project trust").props.onPress();
+  button("Allow project").props.onPress();
+  assert.equal(button("Allowing…").props.disabled, true);
+  await until(() => !state.uiHooks[1]);
+  assert.deepEqual(calls, [
+    { name: "devenv.allow", input: { agentId: "agent" } },
+  ]);
+  assert.ok(button("Review project trust"));
+  state.isFetching = true;
+  assert.equal(button("Refreshing…"), undefined);
+  assert.equal(button("Refresh status").props.disabled, false);
+  state.isFetching = false;
+  button("Refresh status").props.onPress();
+  assert.equal(button("Refreshing…").props.disabled, true);
+  await until(() => !state.uiHooks[3]);
+  assert.ok(button("Refresh status"));
+  state.view = { ...state.view, status: "error" };
+  const expectedError = new Error("Cannot reach daemon");
+  state.onRpc = () => {
+    throw expectedError;
+  };
+  button("Reload environment").props.onPress();
+  await until(() => !state.uiHooks[1]);
+  assert.ok(strings(statusTree()).includes(expectedError.message));
+  button("Refresh status").props.onPress();
+  await until(() => !state.uiHooks[3]);
+  assert.ok(!strings(statusTree()).includes(expectedError.message));
+  state.view = { ...state.view, status: "denied" };
+  button("Review project trust").props.onPress();
+  button("Allow project").props.onPress();
+  await until(() => !state.uiHooks[1]);
+  assert.ok(strings(statusTree()).includes(expectedError.message));
+  button("Cancel").props.onPress();
+  assert.ok(!strings(statusTree()).includes(expectedError.message));
+  await cleanup();
 });

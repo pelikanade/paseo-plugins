@@ -5,6 +5,8 @@ import type {
 import { SettingsScreen } from "./client/settings";
 import { StatusPanel, StatusPopover } from "./client/status";
 import { observeRefresh, refreshStatus } from "./client/refresh";
+import { describe } from "./client/presentation";
+import { statusIcons } from "./client/status-icon";
 import { allowRpc, statusLabel, statusRpc } from "./shared/contracts";
 
 type Agents = PluginClientContext["paseo"]["agents"];
@@ -44,6 +46,7 @@ export default function contribute(client: PluginClientContext) {
         visible: view.root !== null || view.needsReload,
         title: view.root ?? "devenv",
         label: statusLabel(view),
+        icon: statusIcons[describe(view).tone],
       });
       if (view.root !== null || view.needsReload)
         pill.timer = setTimeout(
@@ -76,7 +79,7 @@ export default function contribute(client: PluginClientContext) {
           agentId: agent.id,
           button: {
             title: "devenv",
-            icon: "Leaf",
+            icon: statusIcons.neutral,
             visible: false,
             behavior: { kind: "popover", Content: StatusPopover },
           },
