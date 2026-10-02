@@ -399,14 +399,14 @@ test("compiled MCP launcher uses the canonical cwd, checks trust and exchanges s
   const f = await fixture(t, api);
   const config = api.mcpConfig(f.root, f.binary);
   const denied = spawnSync(config.command, config.args, {
-    env: process.env,
+    env: { ...process.env, ...config.env },
     encoding: "utf8",
   });
   assert.notEqual(denied.status, 0);
   assert.deepEqual(await f.calls(), []);
   await f.trust();
   const child = spawn(config.command, config.args, {
-    env: process.env,
+    env: { ...process.env, ...config.env },
     stdio: ["pipe", "pipe", "pipe"],
   });
   t.after(() => {
@@ -450,4 +450,39 @@ test("compiled MCP launcher uses the canonical cwd, checks trust and exchanges s
     );
   });
   assert.equal((await f.calls()).at(-1).root, f.root);
+});
+test("compiled MCP configuration enables Node mode for a desktop executable", async (t) => {
+  const f = await fixture(t, api);
+  await f.trust();
+  const executable = process.execPath;
+  const desktop = join(f.temporary, "desktop-runtime.cjs");
+  await writeFile(
+    desktop,
+    `#!${executable}\nif (process.env.ELECTRON_RUN_AS_NODE !== "1") process.exit(1);\nconst script = process.argv[4];\nprocess.argv = [process.argv[0], ...process.argv.slice(5)];\neval(script);\n`,
+    { mode: 0o755 },
+  );
+  let config;
+  try {
+    process.execPath = desktop;
+    config = api.mcpConfig(f.root, f.binary);
+  } finally {
+    process.execPath = executable;
+  }
+  const child = spawnSync(config.command, config.args, {
+    env: { ...process.env, ELECTRON_RUN_AS_NODE: "", ...config.env },
+    input:
+      JSON.stringify({ jsonrpc: "2.0", id: 1, method: "initialize" }) +
+      "\n" +
+      JSON.stringify({ jsonrpc: "2.0", id: 2, method: "tools/list" }) +
+      "\n",
+    encoding: "utf8",
+    timeout: 4000,
+  });
+  assert.equal(child.status, 0, child.stderr);
+  const messages = child.stdout
+    .trim()
+    .split("\n")
+    .map((line) => JSON.parse(line));
+  assert.equal(messages[1].result.tools[0].description, f.root);
+  assert.equal((await f.calls()).at(-1).command, "mcp");
 });
