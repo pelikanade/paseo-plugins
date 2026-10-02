@@ -3,11 +3,12 @@ const {
   mkdirSync,
   readFileSync,
   writeFileSync,
+  writeSync,
 } = require("node:fs");
 const { dirname, join } = require("node:path");
 const { createInterface } = require("node:readline");
 const directory = "__DIRECTORY__";
-const command = process.argv[2];
+const command = process.argv[2] === "--home" ? "reload" : process.argv[2];
 const root = process.cwd();
 const control = JSON.parse(
   readFileSync(join(directory, "control.json"), "utf8"),
@@ -16,6 +17,7 @@ appendFileSync(
   join(directory, "calls.jsonl"),
   JSON.stringify({
     command,
+    args: process.argv.slice(2),
     root,
     pid: process.pid,
     runtime: process.env.XDG_RUNTIME_DIR,
@@ -25,8 +27,8 @@ function quote(value) {
   return "'" + String(value).replaceAll("'", "'\\''") + "'";
 }
 function execute() {
-  if (control.fail) {
-    process.stderr.write("intentional build failure\n");
+  if (control.fail || control.failCommand === command) {
+    writeSync(2, "intentional build failure\n");
     process.exit(3);
   }
   if (command === "allow") {
@@ -82,8 +84,9 @@ function execute() {
         JSON.stringify({ jsonrpc: "2.0", id: request.id, result }) + "\n",
       );
     });
-  } else process.exit(2);
+  } else if (command !== "reload") process.exit(2);
 }
 if (control.ignoreTerm) process.on("SIGTERM", () => {});
-if (control.delayMs) setTimeout(execute, control.delayMs);
+const delayMs = control.delayCommands?.[command] ?? control.delayMs;
+if (delayMs) setTimeout(execute, delayMs);
 else execute();
