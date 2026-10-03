@@ -25,7 +25,7 @@ test(
       "generative-ui.connection",
       { agentId: agent.id },
     );
-    const mcp = new Client({ name: "generative-ui-e2e", version: "1.0.0" });
+    let mcp = new Client({ name: "generative-ui-e2e", version: "1.0.0" });
     t.after(() => mcp.close());
     await mcp.connect(
       new StreamableHTTPClientTransport(new URL(connection.url), {
@@ -621,6 +621,148 @@ test(
         } finally {
           await otherMcp.close();
         }
+      },
+    );
+
+    await f.test(
+      "a daemon restart restores cards in Chat after history synchronization",
+      async () => {
+        const unsubmitted = structuredClone(form);
+        unsubmitted.cardId = "restart-choice";
+        unsubmitted.spec.elements.card.props.title = "Restart preferences";
+        unsubmitted.spec.elements.notes.props.label = "Restart notes";
+        unsubmitted.spec.elements.submit.props.label =
+          "Submit restored preferences";
+        await call("publish_ui", unsubmitted);
+        await mcp.close();
+        await f.restart();
+        await page.reload();
+        const timeline = await until(
+          () => f.client.fetchAgentTimeline(agent.id),
+          (value) =>
+            value.entries.filter(
+              (entry) =>
+                entry.item.type === "plugin" &&
+                entry.item.pluginId === "generative-ui",
+            ).length === 4,
+        );
+        const saved = await f.rpc("generative-ui", "generative-ui.list", {
+          agentId: agent.id,
+        });
+        assert.equal(saved.cards.length, 4);
+        assert.equal(
+          saved.cards.find((card) => card.cardId === form.cardId).submitted,
+          true,
+        );
+        await expect(
+          page.getByText("Ready preferences", { exact: true }),
+        ).toBeVisible();
+        await expect(
+          page.getByRole("textbox", { name: "Notes", exact: true }),
+        ).toHaveValue("Preserve my draft");
+        await expect(
+          page.getByRole("button", { name: "Submit preferences", exact: true }),
+        ).toBeDisabled();
+        await expect(page.getByText("Closed", { exact: true })).toBeVisible();
+        assert.deepEqual(
+          timeline.entries
+            .filter(
+              (entry) =>
+                entry.item.type === "plugin" &&
+                entry.item.pluginId === "generative-ui",
+            )
+            .map((entry) => entry.item.data.cardId)
+            .sort(),
+          [
+            form.cardId,
+            table.cardId,
+            gallery.cardId,
+            unsubmitted.cardId,
+          ].sort(),
+        );
+        await page.reload();
+        await expect(
+          page.getByText("Ready preferences", { exact: true }),
+        ).toBeVisible();
+        await expect(
+          page.getByText(table.spec.elements.card.props.title, { exact: true }),
+        ).toBeVisible();
+        await expect(
+          page.getByRole("textbox", { name: "Notes", exact: true }),
+        ).toHaveValue("Preserve my draft");
+        await expect(
+          page.getByRole("button", { name: "Submit preferences", exact: true }),
+        ).toBeDisabled();
+        await expect(page.getByText("Closed", { exact: true })).toBeVisible();
+        await expect(
+          page.getByRole("button", {
+            name: "Submit restored preferences",
+            exact: true,
+          }),
+        ).toBeEnabled();
+        assert.deepEqual(
+          (
+            await f.rpc("generative-ui", "generative-ui.list", {
+              agentId: other.id,
+            })
+          ).cards,
+          [],
+        );
+        assert.equal(
+          (await f.client.fetchAgentTimeline(other.id)).entries.some(
+            (entry) => entry.item.type === "plugin",
+          ),
+          false,
+        );
+        const reloaded = await f.rpc(
+          "generative-ui",
+          "generative-ui.connection",
+          {
+            agentId: agent.id,
+          },
+        );
+        assert.deepEqual(reloaded, connection);
+        mcp = new Client({
+          name: "generative-ui-restarted-e2e",
+          version: "1.0.0",
+        });
+        await mcp.connect(
+          new StreamableHTTPClientTransport(new URL(connection.url), {
+            requestInit: {
+              headers: { Authorization: `Bearer ${connection.token}` },
+            },
+          }),
+        );
+        await page
+          .getByRole("textbox", { name: "Restart notes", exact: true })
+          .fill("Submitted after restart");
+        await page
+          .getByRole("button", {
+            name: "Submit restored preferences",
+            exact: true,
+          })
+          .click();
+        await expect(
+          page.getByRole("button", {
+            name: "Submit restored preferences",
+            exact: true,
+          }),
+        ).toBeDisabled();
+        const submitted = await until(
+          () => call("get_ui_state", { cardId: unsubmitted.cardId }),
+          (state) => state.card.submitted,
+        );
+        assert.equal(submitted.card.submitted, true);
+        assert.equal(submitted.values.notes, "Submitted after restart");
+        const synchronized = await f.client.fetchAgentTimeline(agent.id);
+        assert.equal(
+          synchronized.entries.filter(
+            (entry) =>
+              entry.item.type === "plugin" &&
+              entry.item.pluginId === "generative-ui",
+          ).length,
+          4,
+        );
       },
     );
   },

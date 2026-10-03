@@ -3,6 +3,7 @@ import type { PluginHandlerContext } from "@getpaseo/plugin/server";
 import type { Card, Patch, UiSpec } from "../shared/protocol";
 import {
   applyPatches,
+  cardSchema,
   formValues,
   objectSchema,
   validateForm,
@@ -15,7 +16,66 @@ type Api = PluginHandlerContext["paseo"];
 export class Cards {
   readonly storage = new Storage();
   private delivering: Promise<void> | undefined;
+  private readonly restoring = new Map<string, Promise<void>>();
   private stopped = false;
+
+  async restore(agentId: string, paseo: Api): Promise<void> {
+    if (this.stopped) return;
+    const pending = this.restoring.get(agentId);
+    if (pending) return pending;
+    const work = this.restoreTimeline(agentId, paseo);
+    this.restoring.set(agentId, work);
+    try {
+      await work;
+    } finally {
+      this.restoring.delete(agentId);
+    }
+  }
+
+  private async restoreTimeline(agentId: string, paseo: Api) {
+    const stored = await this.storage.read((db) =>
+      db.cards.some(
+        (entry) => entry.agentId === agentId && entry.card.origin === "mcp",
+      ),
+    );
+    if (!stored) return;
+    const timeline = paseo.agents.ref(agentId).timeline;
+    const existing = new Map<string, Card>();
+    let page = await timeline.refetch({ direction: "tail" });
+    let epoch = page.epoch;
+    for (;;) {
+      if (this.stopped) return;
+      if (page.epoch !== epoch) {
+        existing.clear();
+        epoch = page.epoch;
+      }
+      for (const { item } of page.entries) {
+        if (
+          item.type !== "plugin" ||
+          item.pluginId !== "generative-ui" ||
+          item.kind !== "card" ||
+          item.version !== 1
+        )
+          continue;
+        const parsed = cardSchema.safeParse(item.data);
+        if (parsed.success) existing.set(parsed.data.cardId, parsed.data);
+      }
+      if (!page.hasOlder || !page.startCursor) break;
+      page = await timeline.refetch({
+        direction: "before",
+        cursor: page.startCursor,
+      });
+    }
+    await this.storage.read(async (db) => {
+      for (const entry of db.cards) {
+        if (this.stopped) return;
+        if (entry.agentId !== agentId || entry.card.origin !== "mcp") continue;
+        const card = cardSchema.parse(entry.card);
+        if (JSON.stringify(existing.get(card.cardId)) !== JSON.stringify(card))
+          await this.append(agentId, card, paseo);
+      }
+    });
+  }
 
   async agent(agentId: string, paseo: Api) {
     const result = await paseo.agents.ref(agentId).refresh();
@@ -285,7 +345,7 @@ export class Cards {
   }
   async shutdown() {
     this.stopped = true;
-    await this.delivering;
+    await Promise.all([this.delivering, ...this.restoring.values()]);
   }
   async values(agentId: string, cardId: string) {
     const card = await this.get(agentId, cardId);

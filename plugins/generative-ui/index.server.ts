@@ -70,6 +70,8 @@ export default function contribute(server: PluginServerContext) {
       };
     }),
     server.before("agent.session_open", async ({ request }, { paseo }) => {
+      if (request.reason !== "create")
+        cards.restore(request.agentId, paseo).catch(console.error);
       if (request.purpose === "history") return request;
       await service(paseo).start();
       const token = request.env.PASEO_GENERATIVE_UI_SESSION;

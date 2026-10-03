@@ -183,39 +183,60 @@ export async function runtime(t, options = {}) {
   await assert.rejects(command("paseo", ["--version"], { env: daemonEnv }), {
     code: "ENOENT",
   });
-  child = spawn(process.execPath, [cliEntry, "daemon", "run", "--home", home], {
-    env: daemonEnv,
-    detached: true,
-    stdio: ["ignore", "pipe", "pipe"],
-  });
-  child.stdout.on("data", (data) => {
-    output += data;
-  });
-  child.stderr.on("data", (data) => {
-    output += data;
-  });
-  const instance = await until(
-    async () => {
-      assert.equal(child.exitCode, null, output);
-      return readDaemonInstance(home);
-    },
-    (value) => value?.listen,
-    60000,
-  );
-  const url = `http://${instance.listen}`;
-  client = new DaemonClient({
-    url: options.socket
-      ? `ws+unix://${instance.listen.replace(/^unix:\/\//, "")}:/ws`
-      : `${url.replace("http", "ws")}/ws`,
-    clientId: randomUUID(),
-    appVersion: "0.10.2",
-    webSocketFactory: (address, configuration) =>
-      new WebSocket(address, configuration?.protocols, {
-        headers: configuration?.headers,
-      }),
-  });
-  await client.connect();
-  await client.fetchAgents({ subscribe: {} });
+  let url;
+  const start = async () => {
+    child = spawn(
+      process.execPath,
+      [cliEntry, "daemon", "run", "--home", home],
+      {
+        env: daemonEnv,
+        detached: true,
+        stdio: ["ignore", "pipe", "pipe"],
+      },
+    );
+    child.stdout.on("data", (data) => {
+      output += data;
+    });
+    child.stderr.on("data", (data) => {
+      output += data;
+    });
+    const instance = await until(
+      async () => {
+        assert.equal(child.exitCode, null, output);
+        return readDaemonInstance(home);
+      },
+      (value) => value?.listen,
+      60000,
+    );
+    url = `http://${instance.listen}`;
+    client = new DaemonClient({
+      url: options.socket
+        ? `ws+unix://${instance.listen.replace(/^unix:\/\//, "")}:/ws`
+        : `${url.replace("http", "ws")}/ws`,
+      clientId: randomUUID(),
+      appVersion: "0.10.2",
+      webSocketFactory: (address, configuration) =>
+        new WebSocket(address, configuration?.protocols, {
+          headers: configuration?.headers,
+        }),
+    });
+    await client.connect();
+    await client.fetchAgents({ subscribe: {} });
+    return instance;
+  };
+  await start();
+  const restart = async () => {
+    const instance = await readDaemonInstance(home);
+    const config = JSON.parse(
+      await readFile(join(home, "config.json"), "utf8"),
+    );
+    config.daemon.listen = instance.listen;
+    await writeFile(join(home, "config.json"), JSON.stringify(config));
+    await client.close();
+    await stopDaemonInstance(home, { timeoutMs: 10000 });
+    await stop(child);
+    await start();
+  };
   const install = async (id, path = join(root, "plugins", id)) => {
     const plugin = await client.installDirectoryPlugin(path);
     assert.equal(plugin.status, "running", JSON.stringify(plugin));
@@ -268,8 +289,13 @@ export async function runtime(t, options = {}) {
     home,
     trust,
     env,
-    url,
-    client,
+    get url() {
+      return url;
+    },
+    get client() {
+      return client;
+    },
+    restart,
     install,
     rpc,
     status,

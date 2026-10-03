@@ -29,7 +29,9 @@ The plugin limits specs to 60 KB, 100 elements and depth 12. It rejects cycles, 
 
 Bind direct `/form/field` values and use a Button with `on.press.action` equal to `submit`. Submitted fields are validated on the server, saved, and sent as a regular user message to the same agent. If the agent is busy, delivery waits for a later turn completion. Submission is accepted once per card and retried with the same event/message ID. A crash between provider acceptance and marking the event sent can still require a retry; provider-specific message deduplication is not an exactly-once guarantee.
 
-Submitted values survive plugin reloads. Unsubmitted drafts are client-local, preserved across ordinary card updates but not guaranteed after closing Chat. Streaming, closed and submitted cards disable input. No UI action executes arbitrary code or automatically approves other actions.
+Cards and submitted values survive plugin reloads and daemon restarts. When a session reopens, the plugin reads its restored timeline and appends missing or outdated MCP cards from persisted state, preserving their revisions, submitted values and closed status. Restored cards may follow the loaded history because the SDK appends timeline items. Existing matching cards are retained. Inline cards stay in their original assistant messages.
+
+Unsubmitted drafts are client-local, preserved across ordinary card updates but not guaranteed after closing Chat. Streaming, closed and submitted cards disable input. No UI action executes arbitrary code or automatically approves other actions.
 
 ## Development and verification
 
@@ -37,6 +39,6 @@ Paseo compiles the source; no plugin bundler is required. Host React, React Nati
 
 After editing the skill or examples, run `pnpm --filter @paseo-plugins/generative-ui build:guide`. The generated neutral module lets the compiled plugin serve its skill without depending on its install directory. `verify` checks it against the packaged source files.
 
-Run the affected real daemon/browser E2E scenario, then `pnpm format` and `pnpm check`. Tests exercise every one of the 14 catalog components through the actual MCP transport and Web UI, plus plugin RPC, atomic patches, form submission and reload. Coverage is compared with the real catalog so adding an untested component fails the scenario. Live model generation and iOS/Android device rendering require separate validation; neither is represented by a mocked provider.
+Run the affected real daemon/browser E2E scenario, then `pnpm format` and `pnpm check`. Tests exercise every one of the 14 catalog components through the actual MCP transport and Web UI, plus plugin RPC, atomic patches, form submission, plugin reload and full daemon restart with Chat history synchronization. Coverage is compared with the real catalog so adding an untested component fails the scenario. Live model generation and iOS/Android device rendering require separate validation; neither is represented by a mocked provider.
 
 Research sources: [json-render documentation](https://json-render.dev/llms.txt), [json-render v0.21.0](https://github.com/vercel-labs/json-render/releases/tag/v0.21.0), [Paseo plugin reference](https://paseo.sh/docs/plugins/reference). json-render is Apache-2.0 licensed.
