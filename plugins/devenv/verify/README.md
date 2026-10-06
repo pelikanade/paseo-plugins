@@ -26,11 +26,12 @@ The generator runs Bend in a fresh temporary directory, removes compiler comment
 
 ## What each check establishes
 
-| Check                    | Scope                                                                                                                              |
-| ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------- |
-| Bend2 native proof check | Symbolic claims over the pure typed root and session models; 54 checked law/proof pairs                                            |
-| Generated artifact check | Recompile the committed model and compare the generated JavaScript byte for byte                                                   |
-| Real E2E                 | Isolated Paseo daemon, public RPC and CLI operations, real Web UI, Nix/devenv preparation and actual OpenCode process environments |
+| Check                    | Scope                                                                                                                                                                                                      |
+| ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Bend2 native proof check | Symbolic claims over the pure typed root and session models; 54 checked law/proof pairs                                                                                                                    |
+| Generated artifact check | Recompile the committed model and compare the generated JavaScript byte for byte                                                                                                                           |
+| Bundled skill check      | Regenerate `server/skill.generated.ts` from `skills/devenv/SKILL.md` and compare byte for byte                                                                                                             |
+| Real E2E                 | Isolated Paseo daemon, public RPC and CLI operations, real Web UI, Nix/devenv preparation, actual OpenCode process environments, packaged skill and the prompt and MCP config delivered to a created agent |
 
 The former finite-trace, mutation and mocked runtime unit suites were removed in favor of [real E2E scenarios](../../../e2e/plugins.e2e.mjs). Filesystem observations, Nix evaluation, compiler correctness, operating-system process cleanup and providers honoring injected environment variables are outside the pure model proof. The SDK has no post-startup session acknowledgement: `applied` records a successful environment-returning opening hook, not confirmed provider startup; E2E separately observes selected environment markers in real provider processes.
 

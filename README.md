@@ -85,7 +85,7 @@ Unit tests are not applicable here. All executable behavior tests run through a 
 pnpm test:e2e
 ```
 
-The session scenarios require Linux `/proc`, Nix, devenv, Bash and a real OpenCode executable on `PATH`. They create sessions without sending model turns and inspect selected marker variables in actual OpenCode server processes. Tests use temporary daemon, project, provider data/config/cache and trust directories, and disable the relay. They never install plugins into the user's daemon or alter the user's project trust. Cold Nix builds can take minutes. Missing prerequisites fail the suite.
+The session scenarios require Linux `/proc`, Nix, devenv, Bash and a real OpenCode executable on `PATH`; the workspace's declarative `pkgs.opencode` supplies it inside `devenv shell`, the way `pkgs.chromium` supplies the browser. They create sessions without sending model turns and inspect selected marker variables in actual OpenCode server processes. Tests use temporary daemon, project, provider data/config/cache and trust directories, and disable the relay. They never install plugins into the user's daemon or alter the user's project trust. Cold Nix builds can take minutes. Missing prerequisites fail the suite.
 
 The [generative-ui scenario](e2e/generative-ui.e2e.mjs) uses the real MCP transport and Web UI to publish cards, apply patches, edit form controls, submit to the same agent and reload the plugin. Submission starts an actual OpenCode turn; the assertion checks delivery of the user message and does not depend on a particular model response.
 

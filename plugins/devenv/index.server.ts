@@ -4,6 +4,7 @@ import { TrustReloads } from "./server/reload";
 import { findRoot } from "./server/project";
 import { instructions } from "./server/instructions";
 import { mcpConfig } from "./server/mcp";
+import { skill } from "./server/skill.generated";
 import {
   allowRpc,
   loadRpc,
@@ -34,7 +35,7 @@ export default function contribute(server: PluginServerContext) {
         ...request,
         config: {
           ...request.config,
-          systemPrompt: [request.config.systemPrompt, instructions]
+          systemPrompt: [request.config.systemPrompt, instructions, skill]
             .filter(Boolean)
             .join("\n\n"),
           mcpServers: {

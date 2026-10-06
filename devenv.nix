@@ -10,6 +10,7 @@
   packages = [
     pkgs.git
     pkgs.chromium
+    pkgs.opencode
     inputs.bend.packages.${pkgs.stdenv.hostPlatform.system}.default
   ];
 

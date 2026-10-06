@@ -1,6 +1,6 @@
 {
   "id": "devenv",
-  "description": "Trust-gated devenv environments, MCP and agent guidance with a Bend2-verified session policy.",
+  "description": "Trust-gated devenv environments, MCP, a bundled devenv skill and agent guidance with a Bend2-verified session policy.",
   "requirements": {
     "paseo": ">=0.10.2"
   }

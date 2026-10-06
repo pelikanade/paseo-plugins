@@ -5,6 +5,7 @@ import {
   cp,
   mkdir,
   readFile,
+  readdir,
   symlink,
   writeFile,
 } from "node:fs/promises";
@@ -18,6 +19,21 @@ import {
   until,
   providerEnvironments,
 } from "./support/runtime.mjs";
+
+const persistedAgent = async (home, id) => {
+  const directory = join(home, "agents");
+  for (const entry of await readdir(directory)) {
+    try {
+      const record = JSON.parse(
+        await readFile(join(directory, entry, `${id}.json`), "utf8"),
+      );
+      return typeof record === "object" && record !== null ? record : null;
+    } catch (error) {
+      if (error.code !== "ENOENT") throw error;
+    }
+  }
+  return null;
+};
 
 test(
   "plugins run on a real isolated Paseo daemon",
@@ -97,6 +113,33 @@ test(
           f.rpc("devenv", "devenv.status", { agentId: "missing-agent" }),
           /Agent not found: missing-agent/,
         );
+      },
+    );
+    await f.test(
+      "the installed package bundles the devenv skill and delivers it to a project agent",
+      async () => {
+        const archive = join(f.temporary, "devenv.tgz");
+        await command(
+          "pnpm",
+          ["--filter", "@paseo-plugins/devenv", "pack", "--out", archive],
+          { cwd: root },
+        );
+        const files = await command("tar", ["-tf", archive]);
+        assert.ok(files.includes("package/skills/devenv/SKILL.md"));
+        const bundled = await readFile(
+          join(root, "plugins/devenv/skills/devenv/SKILL.md"),
+          "utf8",
+        );
+        const delivered = await until(
+          () => persistedAgent(f.home, agent.id),
+          (record) => record?.config?.systemPrompt?.includes(bundled) === true,
+          30000,
+        );
+        assert.match(delivered.config.systemPrompt, /devenv project support:/);
+        assert.equal(delivered.config.mcpServers.devenv.type, "stdio");
+        assert.deepEqual(delivered.config.mcpServers.devenv.args.slice(-1), [
+          JSON.stringify([project, "devenv", join(f.trust, "allowed")]),
+        ]);
       },
     );
     await f.test(

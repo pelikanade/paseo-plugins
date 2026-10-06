@@ -1,6 +1,6 @@
 # Paseo devenv
 
-为 Paseo 0.10.2 的代理提供 devenv 项目环境、MCP、操作说明与状态界面。插件使用 devenv 自身的信任文件，只在交互会话打开时应用已准备的环境。
+为 Paseo 0.10.2 的代理提供 devenv 项目环境、MCP、随包技能、操作说明与状态界面。插件使用 devenv 自身的信任文件，只在交互会话打开时应用已准备的环境。
 
 ## 使用
 
@@ -10,6 +10,7 @@
 devenv shell
 pnpm install --frozen-lockfile
 pnpm --filter @paseo-plugins/devenv build:model
+pnpm --filter @paseo-plugins/devenv build:skill
 pnpm check
 ```
 
@@ -51,7 +52,7 @@ pnpm exec paseo plugin reload devenv
 
 新 worktree 的环境仍在自身项目根目录求值并独立缓存，MCP 使用相同的信任规则。已信任主仓库的新 worktree 可在第一次会话打开时准备并应用环境，无须重复授权；构建超过 25 秒预算时仍需等待完成后重载代理。
 
-环境在会话层生效。代理切换命令 cwd 后仍使用同一会话环境；另一项目应使用另一代理。新代理保留已有 `systemPrompt`，追加 devenv 操作说明，并获得信任检查后的 `devenv mcp` 启动配置。已有同名 MCP 配置优先。技能说明通过代理提示交付，MCP 配置在创建时交付；已有代理重载仍能获得环境。
+环境在会话层生效。代理切换命令 cwd 后仍使用同一会话环境；另一项目应使用另一代理。新代理保留已有 `systemPrompt`，依次追加插件说明和随包捆绑的 devenv 技能（`skills/devenv/SKILL.md`，经 `server/skill.generated.ts` 内联），并获得信任检查后的 `devenv mcp` 启动配置。已有同名 MCP 配置优先。Paseo 0.10.2 没有插件技能挂载接口，因此技能内容通过代理提示交付而非 `skill://`；`verify/skill.mjs` 保证交付文本与随包文件逐字节一致。MCP 配置在创建时交付；已有代理重载仍能获得环境。
 
 ## 设置和 RPC
 
@@ -79,4 +80,4 @@ pnpm --filter @paseo-plugins/devenv exec npm pack --dry-run
 
 行为测试全部使用 E2E：启动隔离的真实 Paseo daemon，通过真实 Web UI、RPC、devenv/Nix 和 OpenCode 进程验证插件。测试需要 Linux、Nix、devenv、Bash、OpenCode 和 Chromium，不再提供单元测试或可选真实测试开关；缺少依赖会失败。测试不发送模型请求，项目、provider 数据与信任目录均为临时目录。失败日志、浏览器截图和 trace 保存在仓库的 `test-results/`。冷构建可能需要数分钟。详见 [E2E skill](../../skills/paseo-plugin-e2e/SKILL.md)。Bend 仅用于开发和静态验证，Paseo 安装时直接编译包含已提交模型产物的插件源码，无须 Bend。
 
-[验证说明](verify/README.md) 区分 Bend2 原生证明、产物检查与真实 E2E；[来源](PROVENANCE.md) 记录参考实现和移植差异。
+[验证说明](verify/README.md) 区分 Bend2 原生证明、产物检查与真实 E2E；[来源](PROVENANCE.md) 记录参考实现和移植差异。真实 E2E 断言随包技能存在，并断言交付给项目代理的 `systemPrompt` 与 `skills/devenv/SKILL.md` 逐字节一致，且 `devenv` MCP 启动配置指向该项目。

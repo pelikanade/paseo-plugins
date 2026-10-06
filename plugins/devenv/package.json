@@ -11,6 +11,7 @@
     "client/",
     "server/",
     "shared/",
+    "skills/",
     "verify/",
     "README.md",
     "PROVENANCE.md"
@@ -18,7 +19,8 @@
   "scripts": {
     "typecheck": "tsc --noEmit",
     "build:model": "node verify/build-model.mjs",
-    "verify": "node verify/check-bend.mjs"
+    "build:skill": "node verify/skill.mjs --write",
+    "verify": "node verify/skill.mjs && node verify/check-bend.mjs"
   },
   "devDependencies": {
     "@getpaseo/plugin": "0.10.2",
