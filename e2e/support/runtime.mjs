@@ -146,8 +146,13 @@ export async function runtime(t, options = {}) {
     CODEX_HOME: join(temporary, "codex"),
     PATH: `${join(root, "node_modules/.bin")}:${process.env.PATH}`,
   });
-  await command("devenv", ["--version"], { env });
-  await command("opencode", ["--version"], { env });
+  Object.assign(env, options.env);
+  if (options.isolateHome) {
+    await mkdir(join(temporary, "home"), { recursive: true });
+    env.HOME = join(temporary, "home");
+  }
+  for (const tool of options.tools ?? ["devenv", "opencode"])
+    await command(tool, ["--version"], { env });
   await writeFile(
     join(home, "config.json"),
     JSON.stringify({
@@ -156,7 +161,10 @@ export async function runtime(t, options = {}) {
         relay: { enabled: false },
       },
       features: { webUi: { enabled: true } },
-      agents: { skills: { selection: { mode: "custom", skills: [] } } },
+      agents: {
+        skills: { selection: { mode: "custom", skills: [] } },
+        ...(options.providers ? { providers: options.providers } : {}),
+      },
       pluginsEnabled: true,
     }),
   );
