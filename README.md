@@ -114,6 +114,8 @@ The [generative-ui plugin](plugins/generative-ui/README.md) adds native json-ren
 
 The [filler-noise plugin](plugins/filler-noise/README.md) hides assistant rows whose text is only dots, ellipses, or whitespace, such as the `.` DeepSeek models emit on tool-call turns.
 
+The [loop plugin](plugins/loop/README.md) re-runs a prompt in the same agent on a local schedule. `/loop 5m check deploy` arms a fixed interval; a prompt with no interval asks the agent to choose a heartbeat or watcher. Loops stop with the agent and are not cloud automations.
+
 The [ESLint configuration](eslint.config.mjs) follows [AsterisMono/obsidian-agent](https://github.com/AsterisMono/obsidian-agent/blob/main/eslint.config.mjs), with generated environment directories ignored. It enables strict type-aware checks, exhaustive switches, rejects unsafe assertions and unhandled promises (including `void`), and forbids source comments.
 
 Use `$paseo-plugin-dev` in an agent that discovers `.agents/skills`, or load [SKILL.md](skills/paseo-plugin-dev/SKILL.md) directly. Its [workflow reference](skills/paseo-plugin-dev/references/development.md) covers local reloads and release preparation.

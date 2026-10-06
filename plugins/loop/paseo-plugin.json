@@ -1,0 +1,7 @@
+{
+  "id": "loop",
+  "description": "Session-local /loop scheduling that re-runs a prompt in the same agent until the outcome is met, the user stops it, or the agent is archived.",
+  "requirements": {
+    "paseo": ">=0.10.2"
+  }
+}

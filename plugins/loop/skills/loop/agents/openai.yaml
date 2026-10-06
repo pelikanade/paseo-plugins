@@ -1,0 +1,4 @@
+interface:
+  display_name: "Loop"
+  short_description: "Re-run a prompt on a local session schedule"
+  default_prompt: "Use $loop to keep working on this until it is done."
