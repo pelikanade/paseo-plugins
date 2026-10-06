@@ -1,7 +1,7 @@
 import type { PluginButtonIconProps } from "@getpaseo/plugin/client";
-import { Icon } from "@getpaseo/plugin/client/react-native";
 import type { ComponentType } from "react";
 import { View } from "react-native";
+import { DevenvMark, devenvMarkHeightRatio } from "./devenv-mark";
 import { toneColors } from "./presentation";
 import type { Tone } from "./presentation";
 
@@ -11,9 +11,9 @@ function createIcon(tone: Tone): ComponentType<PluginButtonIconProps> {
       <View
         accessibilityElementsHidden
         importantForAccessibility="no-hide-descendants"
-        style={{ width: size, height: size }}
+        style={{ width: size, height: size * devenvMarkHeightRatio }}
       >
-        <Icon name="Leaf" size={size} color={color} />
+        <DevenvMark size={size} color={color} />
         <View
           style={{
             position: "absolute",
