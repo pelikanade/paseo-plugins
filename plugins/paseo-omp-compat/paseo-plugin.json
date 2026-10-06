@@ -1,0 +1,7 @@
+{
+  "id": "paseo-omp-compat",
+  "description": "Appends the Paseo first directive to every agent session's system prompt, natively for omp agents.",
+  "requirements": {
+    "paseo": ">=0.10.2"
+  }
+}
