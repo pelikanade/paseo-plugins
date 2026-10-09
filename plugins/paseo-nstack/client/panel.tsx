@@ -14,15 +14,11 @@ import {
 } from "react-native";
 import {
   checkNowRpc,
-  discoverRpc,
   panelRpc,
   saveSettingsRpc,
   setPauseRpc,
   testConnectionRpc,
   type Binding,
-  type DiscoveredField,
-  type DiscoveredProject,
-  type Discovery,
   type GitHubProblem,
   type PluginDefaults,
   type ProviderChoice,
@@ -205,7 +201,6 @@ function AccessNotice({
   onRetry: () => void;
 }) {
   const titles: Record<GitHubProblem["kind"], string> = {
-    project_scope: "GitHub Projects access needed",
     authentication: "GitHub sign-in is not valid",
     permission: "GitHub denied access",
   };
@@ -213,11 +208,9 @@ function AccessNotice({
     ? problem.hostname
     : `'${problem.hostname.replace(/'/g, "'\\''")}'`;
   const command =
-    problem.kind === "project_scope"
-      ? `gh auth refresh --hostname ${hostname} --scopes project`
-      : problem.kind === "authentication"
-        ? `gh auth login --hostname ${hostname}`
-        : null;
+    problem.kind === "authentication"
+      ? `gh auth login --hostname ${hostname}`
+      : null;
   return (
     <View
       accessibilityRole="alert"
@@ -272,7 +265,7 @@ function AccessNotice({
         </>
       ) : (
         <Text style={{ color: theme.colors.foregroundMuted, fontSize: 12 }}>
-          Check the GitHub account's repository and Project access, token
+          Check the GitHub account's repository and Issues access, token
           permissions, and organization authorization.
         </Text>
       )}
@@ -301,7 +294,6 @@ function relativeTime(value: string | null) {
 export function NstackPanel(props: PluginWorkspacePanelProps) {
   const readPanel = useRpc(panelRpc);
   const saveSettings = useRpc(saveSettingsRpc);
-  const discover = useRpc(discoverRpc);
   const testConnection = useRpc(testConnectionRpc);
   const setPause = useRpc(setPauseRpc);
   const checkNow = useRpc(checkNowRpc);
@@ -312,9 +304,6 @@ export function NstackPanel(props: PluginWorkspacePanelProps) {
   });
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
-  const [lastGitHubAction, setLastGitHubAction] = useState<"discover" | "test">(
-    "discover",
-  );
   const [error, setError] = useState<{
     message: string;
     githubProblem: GitHubProblem | null;
@@ -322,10 +311,6 @@ export function NstackPanel(props: PluginWorkspacePanelProps) {
   const [message, setMessage] = useState<string | null>(null);
   const [owner, setOwner] = useState("");
   const [repository, setRepository] = useState("");
-  const [discovery, setDiscovery] = useState<Discovery | null>(null);
-  const [project, setProject] = useState<DiscoveredProject | null>(null);
-  const [field, setField] = useState<DiscoveredField | null>(null);
-  const [readyId, setReadyId] = useState<string | null>(null);
   const [checkEvery, setCheckEvery] = useState("60");
   const [repairEvery, setRepairEvery] = useState("3600");
   const [automaticStarts, setAutomaticStarts] = useState(true);
@@ -370,21 +355,6 @@ export function NstackPanel(props: PluginWorkspacePanelProps) {
     setAutomaticStarts(view.defaults.automaticStarts);
     setDefaultAgent(view.defaults.agent);
     setOverrideAgent(binding?.agent ?? null);
-    setDiscovery(null);
-    if (binding) {
-      const syntheticField: DiscoveredField = {
-        id: binding.statusField.id,
-        name: binding.statusField.name,
-        options: [binding.readyValue],
-      };
-      setProject({ ...binding.project, fields: [syntheticField] });
-      setField(syntheticField);
-      setReadyId(binding.readyValue.id);
-    } else {
-      setProject(null);
-      setField(null);
-      setReadyId(null);
-    }
     setError(
       view.health.githubProblem
         ? {
@@ -393,39 +363,11 @@ export function NstackPanel(props: PluginWorkspacePanelProps) {
           }
         : null,
     );
-    setLastGitHubAction("discover");
     setMessage(null);
     setSettingsOpen(true);
   }
 
-  function findProjects() {
-    setLastGitHubAction("discover");
-    perform("discover", async () => {
-      const result = await discover({
-        workspaceId: props.workspaceId,
-        owner: owner.trim(),
-        repository: repository.trim(),
-      });
-      if ("problem" in result) {
-        setDiscovery(null);
-        return result.problem;
-      }
-      setDiscovery(result);
-      const selected =
-        result.projects.find((candidate) => candidate.id === project?.id) ??
-        result.projects.at(0) ??
-        null;
-      if (selected) selectProject(selected);
-      else {
-        setProject(null);
-        setField(null);
-        setReadyId(null);
-      }
-    });
-  }
-
   function testGitHubConnection() {
-    setLastGitHubAction("test");
     perform("test", async () => {
       const result = await testConnection({
         workspaceId: props.workspaceId,
@@ -440,33 +382,11 @@ export function NstackPanel(props: PluginWorkspacePanelProps) {
     });
   }
 
-  function selectProject(next: DiscoveredProject) {
-    const nextField =
-      next.fields.find((candidate) =>
-        candidate.options.some(
-          (option) => option.name.toLowerCase() === "ready",
-        ),
-      ) ??
-      next.fields.at(0) ??
-      null;
-    setProject(next);
-    setField(nextField);
-    setReadyId(
-      nextField?.options.find((option) => option.name.toLowerCase() === "ready")
-        ?.id ??
-        nextField?.options.at(0)?.id ??
-        null,
-    );
-  }
-
   function selectedBinding(): Binding {
-    const status = field?.options.find((option) => option.id === readyId);
     const checkSeconds = Number(checkEvery);
     const repairSeconds = repairEvery.trim() ? Number(repairEvery) : null;
     if (!owner.trim() || !repository.trim())
       throw new Error("Enter a GitHub owner and repository");
-    if (!project || !field || !status)
-      throw new Error("Select a project, status field, and Ready value");
     if (!Number.isInteger(checkSeconds) || checkSeconds < 10)
       throw new Error("Check interval must be at least 10 seconds");
     if (
@@ -477,14 +397,6 @@ export function NstackPanel(props: PluginWorkspacePanelProps) {
     return {
       workspaceId: props.workspaceId,
       repository: { owner: owner.trim(), name: repository.trim() },
-      project: {
-        id: project.id,
-        number: project.number,
-        title: project.title,
-        url: project.url,
-      },
-      statusField: { id: field.id, name: field.name },
-      readyValue: status,
       paused: view?.binding?.paused ?? false,
       checkEverySeconds: checkSeconds,
       repairEverySeconds: repairSeconds,
@@ -559,8 +471,8 @@ export function NstackPanel(props: PluginWorkspacePanelProps) {
             </View>
             <Text style={{ color: props.theme.colors.foregroundMuted }}>
               {view?.binding
-                ? `${view.binding.repository.owner}/${view.binding.repository.name} · ${view.binding.project.title}`
-                : "Connect this workspace to a GitHub Project"}
+                ? `${view.binding.repository.owner}/${view.binding.repository.name}`
+                : "Connect this workspace to a GitHub repository"}
             </Text>
           </View>
           <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
@@ -913,108 +825,44 @@ export function NstackPanel(props: PluginWorkspacePanelProps) {
                     onChange={setRepository}
                   />
                 </View>
-                <View
-                  style={{ flexDirection: "row", gap: 8, alignItems: "center" }}
-                >
-                  <Action
-                    theme={props.theme}
-                    label={busy === "discover" ? "Finding…" : "Find projects"}
-                    disabled={
-                      busy !== null || !owner.trim() || !repository.trim()
-                    }
-                    onPress={findProjects}
-                  />
-                  {discovery ? (
-                    <Text style={{ color: props.theme.colors.foregroundMuted }}>
-                      Connected as {discovery.login}
-                    </Text>
-                  ) : null}
-                </View>
-              </Section>
-
-              <Section theme={props.theme} title="GitHub Project">
                 {githubProblem ? (
                   <AccessNotice
                     theme={props.theme}
                     problem={githubProblem}
                     busy={busy !== null}
-                    onRetry={
-                      lastGitHubAction === "test"
-                        ? testGitHubConnection
-                        : findProjects
-                    }
+                    onRetry={testGitHubConnection}
                   />
                 ) : null}
-                <View
-                  style={{ flexDirection: "row", flexWrap: "wrap", gap: 7 }}
-                >
-                  {(discovery?.projects ?? (project ? [project] : [])).map(
-                    (candidate) => (
-                      <Choice
-                        key={candidate.id}
-                        theme={props.theme}
-                        label={candidate.title}
-                        selected={candidate.id === project?.id}
-                        onPress={() => {
-                          selectProject(candidate);
-                        }}
-                      />
-                    ),
-                  )}
-                </View>
+              </Section>
+
+              <Section theme={props.theme} title="Issue labels">
                 <Text
                   style={{
                     color: props.theme.colors.foregroundMuted,
                     fontSize: 12,
                   }}
                 >
-                  Status field
+                  Agents create these fixed stack labels when needed. The
+                  watcher only reads them.
                 </Text>
-                <View
-                  style={{ flexDirection: "row", flexWrap: "wrap", gap: 7 }}
+                <Text
+                  style={{
+                    color: props.theme.colors.foreground,
+                    fontSize: 12,
+                  }}
                 >
-                  {(project?.fields ?? []).map((candidate) => (
-                    <Choice
-                      key={candidate.id}
-                      theme={props.theme}
-                      label={candidate.name}
-                      selected={candidate.id === field?.id}
-                      onPress={() => {
-                        setField(candidate);
-                        setReadyId(
-                          candidate.options.find(
-                            (option) => option.name.toLowerCase() === "ready",
-                          )?.id ??
-                            candidate.options.at(0)?.id ??
-                            null,
-                        );
-                      }}
-                    />
-                  ))}
-                </View>
+                  stack:backlog · stack:ready · stack:in-progress ·
+                  stack:in-review · stack:merge-queue · stack:hitl · stack:done
+                </Text>
                 <Text
                   style={{
                     color: props.theme.colors.foregroundMuted,
                     fontSize: 12,
                   }}
                 >
-                  Ready value
+                  Closed issues are excluded. Issues with conflicting workflow
+                  labels appear under Waiting on you.
                 </Text>
-                <View
-                  style={{ flexDirection: "row", flexWrap: "wrap", gap: 7 }}
-                >
-                  {(field?.options ?? []).map((option) => (
-                    <Choice
-                      key={option.id}
-                      theme={props.theme}
-                      label={option.name}
-                      selected={option.id === readyId}
-                      onPress={() => {
-                        setReadyId(option.id);
-                      }}
-                    />
-                  ))}
-                </View>
               </Section>
 
               <Section theme={props.theme} title="Agent provider and model">

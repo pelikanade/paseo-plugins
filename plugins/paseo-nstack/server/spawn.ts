@@ -174,11 +174,11 @@ export function createStarter(directory: string): Starter {
     agent: PaseoAgentHandle,
     binding: Binding,
     launch: Launch,
-    findExisting: boolean,
+    recovering: boolean,
   ) {
     try {
       const item = notice(binding, launch);
-      if (findExisting) {
+      if (recovering) {
         let page = await agent.timeline.refetch({
           direction: "tail",
           limit: 100,
@@ -259,7 +259,7 @@ export function createStarter(directory: string): Starter {
 
 Read and follow ${join(skills, "nstack-orchestrate/SKILL.md")} before acting. The complete vendored skill tree is at ${skills}.
 
-An enabled workspace binding is standing permission for this handling step. GitHub polling cannot identify who changed a Project field, so a Ready signal is authorized by the binding owner. Human comments and commands are filtered to the authenticated GitHub login.
+An enabled workspace binding is standing permission for this handling step. Applying stack:ready to an open issue authorizes a Ready signal under the binding owner's permission. Human comments and commands are filtered to the authenticated GitHub login.
 
 Signal:
 ${JSON.stringify(launch.signal, null, 2)}
@@ -267,7 +267,7 @@ ${JSON.stringify(launch.signal, null, 2)}
 Binding:
 ${JSON.stringify(binding, null, 2)}
 
-Handle only this signal. Re-read GitHub state, apply nstack idempotency, and remain quiet when nothing changes.`;
+Handle only this signal. Re-read GitHub issue state and labels, apply nstack idempotency, and remain quiet when nothing changes. Dispatch Ready work only while the issue is open and stack:ready is its only workflow label. Conflicting workflow labels require human attention. Agents create missing standard labels and replace the previous workflow label while preserving unrelated labels.`;
     const agent = await paseo.workspaces
       .ref(binding.workspaceId)
       .agents.create({

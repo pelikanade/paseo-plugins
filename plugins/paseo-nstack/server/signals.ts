@@ -1,4 +1,8 @@
-import type { Binding, PanelState } from "../shared/contracts";
+import {
+  workflowLabels,
+  type Binding,
+  type PanelState,
+} from "../shared/contracts";
 import type { GitHub } from "./github";
 import type { Signal, WorkspaceState } from "./state";
 
@@ -9,6 +13,10 @@ export interface Collection {
   attention: PanelState["attention"];
   login: string;
 }
+
+const workflowLabelNames = Object.fromEntries<true>(
+  Object.values(workflowLabels).map((label) => [label, true]),
+);
 
 function issueNumber(url: string | undefined) {
   if (!url) return null;
@@ -40,10 +48,10 @@ export async function collectSignals(
   const cursors = { ...workspace.cursors };
   const signals: Signal[] = [];
   const closedSince = cursors["pulls:closed-since"] ?? null;
-  const [login, repositoryInfo, items, pulls] = await Promise.all([
+  const [login, repositoryInfo, issues, pulls] = await Promise.all([
     github.login(),
     github.repository(owner, repository),
-    github.projectItems(binding.project.id, binding.statusField.name),
+    github.issues(owner, repository),
     github.pulls(owner, repository, closedSince),
   ]);
   cursors["pulls:closed-since"] = now;
@@ -56,48 +64,65 @@ export async function collectSignals(
   };
   const attention: PanelState["attention"] = [];
 
-  for (const item of items) {
-    const value = item.fieldValueByName;
-    const content = item.content;
-    if (!value?.name || !content) continue;
-    const normalized = value.name.trim().toLowerCase();
-    if (value.optionId === binding.readyValue.id) {
-      counts.ready += 1;
-      if (content.__typename === "Issue")
-        signals.push(
-          signal(
-            `ready:${item.id}:${value.updatedAt}`,
-            "ready",
-            `Issue #${content.number.toString()} is Ready`,
-            content.url,
-            value.updatedAt,
-            null,
-            {
-              issue: content.number.toString(),
-              projectItem: item.id,
-              status: value.name,
-            },
-          ),
-        );
-    } else if (normalized === "in progress") counts.building += 1;
-    else if (normalized === "in review") counts.reviewing += 1;
-    else if (normalized === "merge queue") {
-      counts.mergeQueue += 1;
-      attention.push({
-        number: content.number,
-        title: content.title,
-        status: "merge_queue",
-        detail: "Ready for your merge",
-        url: content.url,
-      });
-    } else if (normalized === "blocked / hitl") {
+  for (const issue of issues) {
+    const labels = issue.labels
+      .map((label) => label.name.toLowerCase())
+      .filter((label) => Object.hasOwn(workflowLabelNames, label));
+    if (labels.length > 1) {
       counts.needsYou += 1;
       attention.push({
-        number: content.number,
-        title: content.title,
+        number: issue.number,
+        title: issue.title,
+        status: "needs_you",
+        detail: `Conflicting workflow labels: ${labels.join(", ")}`,
+        url: issue.html_url,
+      });
+      continue;
+    }
+    const label = labels[0];
+    if (label === workflowLabels.ready) {
+      counts.ready += 1;
+      const events = await github.issueEvents(owner, repository, issue.number);
+      const ready = events.findLast(
+        (event) =>
+          event.label?.name.toLowerCase() === workflowLabels.ready &&
+          (event.event === "labeled" || event.event === "unlabeled"),
+      );
+      if (!ready)
+        throw new Error(
+          `Ready label history is unavailable for issue #${issue.number.toString()}`,
+        );
+      if (ready.event !== "labeled") continue;
+      signals.push(
+        signal(
+          `ready:${issue.number.toString()}:${ready.id.toString()}`,
+          "ready",
+          `Issue #${issue.number.toString()} is Ready`,
+          issue.html_url,
+          ready.created_at,
+          null,
+          { issue: issue.number.toString(), label: workflowLabels.ready },
+        ),
+      );
+    } else if (label === workflowLabels.building) counts.building += 1;
+    else if (label === workflowLabels.reviewing) counts.reviewing += 1;
+    else if (label === workflowLabels.mergeQueue) {
+      counts.mergeQueue += 1;
+      attention.push({
+        number: issue.number,
+        title: issue.title,
+        status: "merge_queue",
+        detail: "Ready for your merge",
+        url: issue.html_url,
+      });
+    } else if (label === workflowLabels.needsYou) {
+      counts.needsYou += 1;
+      attention.push({
+        number: issue.number,
+        title: issue.title,
         status: "needs_you",
         detail: "Needs your decision",
-        url: content.url,
+        url: issue.html_url,
       });
     }
   }
@@ -316,7 +341,7 @@ export async function collectSignals(
         `repair:${binding.workspaceId}:${repairDueAt}`,
         "repair",
         "Repair check",
-        binding.project.url,
+        `${repositoryInfo.html_url}/issues`,
         repairDueAt,
         null,
         {},

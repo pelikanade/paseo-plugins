@@ -4,7 +4,7 @@ Detail for [nstack-design](../SKILL.md) §3 and §5 (formerly `orchestrate` Mode
 
 ## Upstream
 
-Slicing **is** Matt Pocock's `to-tickets`; `to-spec` covers the small-change path that has no written spec yet. Read both before you start and follow their mechanics. Where nstack and upstream disagree on _how to slice or publish_, upstream wins. nstack keeps: the settled-source precondition, design coverage and budget, AFK/HITL typing, the single approval, the issue body fields, and the kanban seeding. Each override is named below.
+Slicing **is** Matt Pocock's `to-tickets`; `to-spec` covers the small-change path that has no written spec yet. Read both before you start and follow their mechanics. Where nstack and upstream disagree on _how to slice or publish_, upstream wins. nstack keeps: the settled-source precondition, design coverage and budget, AFK/HITL typing, the single approval, the issue body fields, GitHub Issues as the sole tracker, and canonical workflow labels. Each override is named below.
 
 - [`to-tickets`](https://github.com/mattpocock/skills/blob/main/skills/engineering/to-tickets/SKILL.md): plan → tracer-bullet tickets with blocking edges, quiz, publish blockers-first.
 - [`to-spec`](https://github.com/mattpocock/skills/blob/main/skills/engineering/to-spec/SKILL.md): conversation → spec by synthesis (no interview), with agreed test seams.
@@ -20,18 +20,18 @@ Pinned reading: mattpocock/skills `main` @ `b0618bc` (2026-10-08). If upstream h
 3. Draft **vertical slices**: each a narrow but complete path through every layer, demoable or verifiable alone, sized for one fresh context window, prefactoring first. Give each its **blocking edges**.
 4. **Wide refactors** are the exception: expand (new form beside old) → migrate in batches sized by blast radius, each its own ticket blocked by the expand → contract once no caller remains, blocked by every batch. If batches can't stay green alone, they share an integration branch that blocks one final integrate-and-verify ticket.
 5. **Quiz** the human with a numbered list (title, blocked by, what it delivers): granularity, edges, merge/split. Iterate until approved. (nstack: replaced by design PR review; see overrides.)
-6. **Publish** blockers-first so edges cite real ids: native blocking links where the tracker has them, sub-issues of the source issue, the `ready-for-agent` label; or one file per ticket when there is no tracker. Work the **frontier** (tickets whose blockers are all done). Never close or modify the parent.
+6. **Publish** blockers-first so edges cite real ids, with blocking links and sub-issues of the source issue. Work the **frontier** (issues whose blockers are all done). Never close or modify the parent. In nstack, publish to GitHub Issues and apply the workflow labels in §6.
 7. No file paths or code in tickets, except a trimmed decision-rich prototype snippet, marked as such.
 
 **to-spec**
 
 1. Synthesize from what's already known; **don't interview**.
 2. Sketch the **test seams**: prefer existing seams, the highest one possible, as few as possible (ideally one). Check them with the human.
-3. Write the spec (Problem Statement, Solution, a long list of user stories, Implementation Decisions, Testing Decisions, Out of Scope, Further Notes), no file paths, and publish it as a ready-for-agent issue.
+3. Write the spec (Problem Statement, Solution, a long list of user stories, Implementation Decisions, Testing Decisions, Out of Scope, Further Notes), no file paths, and publish it as a GitHub issue with its nstack workflow label after the approval below.
 
 ### Host-neutral translation
 
-- Upstream's "tell the user to run `/setup-matt-pocock-skills`" (tracker + label config) is a Claude-Code slash command. In nstack the tracker and labels are fixed by the kanban rules; never stop to ask for setup.
+- Upstream's "tell the user to run `/setup-matt-pocock-skills`" is a Claude-Code slash command. In nstack, use GitHub Issues and the fixed workflow labels in [nstack-orchestrate § Issue workflow](../../nstack-orchestrate/SKILL.md#issue-workflow); create missing labels under the run's existing write permissions.
 - `disable-model-invocation` on upstream means it is human-invoked there. In nstack the design merge (or the small-change OK) is the invocation.
 
 ### nstack overrides (named)
@@ -40,7 +40,7 @@ Pinned reading: mattpocock/skills `main` @ `b0618bc` (2026-10-08). If upstream h
 - **No quiz; the design merge is the one approval.** Upstream quizzes the human before publishing. nstack: the owner reviews each slice in the design PR, and merging it approves the slices and permits filing. Only the small-change path (no design PR) keeps one lightweight confirmation before filing.
 - **to-spec only for the small-change path.** For features the design doc _is_ the spec; don't write a second one. For a bug fix / small change whose settled behaviour lives only in conversation, use to-spec to write the spec issue first, and publish it only after the human's explicit OK (filing is externally visible).
 - **Seams are agreed once, before filing.** to-spec's seam check (and tdd's "test only at pre-agreed seams") happens in the design PR's Slices section (small change: in the confirmation), so AFK implementers never have to ask. Each issue carries its agreed seams.
-- **Not every ticket is `ready-for-agent`.** Upstream labels all tickets agent-grabbable. nstack: only AFK with closed blockers go to **Ready**; HITL/checkpoint go to **Blocked / HITL**; still-blocked go to **Backlog**.
+- **Readiness is explicit.** Only AFK issues with closed blockers and cleared checkpoints receive `stack:ready`; HITL/uncleared checkpoint receive `stack:hitl`; still-blocked issues receive `stack:backlog`. The Ready label itself is the hand-off signal.
 - **Design IDs, not prose-only.** Issues cite L/S/B ids from the pinned design (paths live there), consistent with upstream's no-paths rule.
 - **Budget caps slice count.** Upstream has no ceiling; nstack's `issues ≤ n` does.
 
@@ -142,16 +142,17 @@ Keep file paths and code out of the body except via design IDs, or a decision-ri
 Publish in dependency order so later issues can cite real numbers.
 
 - GitHub: create the issue (`create_issue`), attach it under the parent (`add_sub_issue`), add native blocked-by edges where the tooling supports it (`gh issue create --blocked-by` on gh ≥ 2.94, or `gh api --method POST repos/<o>/<r>/issues/<n>/dependencies/blocked_by -F issue_id=<db id>`); otherwise write "Blocked by" in the body.
-- Seed the nstack kanban: the repo's GitHub Project (one per repo or feature epic) status column, with labels of the same names as fallback. AFK with closed blockers → **Ready** (`stack:ready`); still blocked → **Backlog**; HITL/checkpoint → **Blocked / HITL** (`stack:hitl`). Also apply any repo `ready-for-agent` label the project uses, on Ready cards only.
-- No tracker at all: write one file per issue under `.scratch/<feature>/issues/NN-<slug>.md` (or the project's agreed folder), numbered blockers-first, with the same column tags in frontmatter.
+- Create missing canonical labels and set the issue workflow state using [nstack-orchestrate § Issue workflow](../../nstack-orchestrate/SKILL.md#issue-workflow). AFK with closed blockers and cleared checkpoints → **Ready** (`stack:ready`); still blocked → **Backlog** (`stack:backlog`); HITL/uncleared checkpoint → **Blocked / HITL** (`stack:hitl`). Replace only the prior workflow label, preserving unrelated category labels. Multiple workflow labels require human resolution and prevent dispatch.
+- If GitHub issue or label writes are unavailable, report the missing access and which issues remain unfiled or unclassified. GitHub Issues are the sole tracker; keep the approved slices in the design until filing is possible.
 - Do not close or edit the parent issue beyond adding sub-issues.
 
-Record the filed list with numbers, types, board columns, and the **Ready** frontier; the drain starts from it. `project-map` can render the board if the human wants a status page.
+Record the filed list with numbers, types, workflow states, and the **Ready** frontier; the drain starts from it. `project-map` can summarize the issues if the human wants a status page.
 
-### 7. Mark Ready issues ready for work (the hand-off signal)
+### 7. Confirm the Ready hand-off
 
-Filing an issue and seeding its column are not, by themselves, the signal `nstack-orchestrate` acts on. After the board is seeded:
+An open issue labeled `stack:ready` automatically signals `nstack-orchestrate`. Filing and labeling the Ready frontier completes the hand-off; no extra command or human-identity action is required.
 
-- **Mark each Ready AFK issue as ready for work** for the orchestrator, under the human's identity (the orchestrator acts only on the human's own ready signal). Ready cards only: Backlog cards become Ready when their blockers merge (the orchestrator promotes them when the blocking PR merges), and HITL cards are marked ready by the human once resolved.
-- If you can't mark them (no write access for that identity, or the repo isn't set up for the orchestrator yet), tell the human the cards are filed and that the orchestrator picks them up on its next signal, on the human's `drain` command, or on the optional periodic sweep.
+- Re-read each filed issue and confirm exactly one canonical workflow label. Backlog issues become Ready when their blockers close and checkpoints are cleared; HITL issues require the human's resolution first. Closed issues never enter the Ready frontier.
+- With an enabled Paseo binding, the read-only watcher detects Ready label events and dispatches each occurrence once, subject to pause and exact-duplicate protection. Unrelated edits must not create another Ready start. The orchestrator still enforces design approval, AFK/checkpoint gates, caps, and review policy.
+- If the binding is paused or unavailable, report the filed Ready issues and the watcher state. The human can resume/configure the binding or invoke `drain`; do not reapply labels merely to force another start.
 - Never dispatch a worker yourself.

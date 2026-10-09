@@ -8,11 +8,13 @@ aliases: [personal agent coding stack, nstack]
 
 Domestic pack **nstack** (this folder). Each seat skill pins and follows an upstream (see its `## Upstream` section; pointers in [[Curated External Skills]]): mattpocock/skills @ `b0618bc`, luoling8192/create-pr-with-evidence-skill @ `ae59b8b`. Every seat compacts context per Pocock `handoff` and attaches nstack artifacts on top. Bot-store skill ids stay flat (`sand-workflow:<id>`). Learn seat [[nstack/lessons-ledger/SKILL|lessons-ledger]] lives in this folder (the bot-store copy is shared, so other bots can use it too).
 
-Skills here: [[nstack/lessons-ledger/SKILL|lessons-ledger]], [[nstack/nstack-design/SKILL|nstack-design]] (designer; references: `grill.md`, `design.md`, `slicing-and-filing.md`, `pr-body.md`), [[nstack/nstack-orchestrate/SKILL|nstack-orchestrate]] (orchestrator), [[nstack/implementer/SKILL|implementer]] (worker), [[nstack/auto-reviewer/SKILL|auto-reviewer]] (review procedure the orchestrator runs), [[nstack/pr-with-evidence/SKILL|pr-with-evidence]]. Retired stubs: `orchestrate` (split into nstack-design + nstack-orchestrate on 2026-10-09) and `grill-with-human`, `design-first-feature`, `split-into-issues` (now phases of nstack-design). Bot-store ids: `sand-workflow:nstack-design`, `sand-workflow:nstack-orchestrate`. GitHub repos only (Issues + Projects). Both seat skills are platform-independent: they describe the roles only, not what runs them. nstack is not tied to Grok Bot; a Paseo plugin is under consideration as its runtime.
+Skills here: [[nstack/lessons-ledger/SKILL|lessons-ledger]], [[nstack/nstack-design/SKILL|nstack-design]] (designer; references: `grill.md`, `design.md`, `slicing-and-filing.md`, `pr-body.md`), [[nstack/nstack-orchestrate/SKILL|nstack-orchestrate]] (orchestrator), [[nstack/implementer/SKILL|implementer]] (worker), [[nstack/auto-reviewer/SKILL|auto-reviewer]] (review procedure the orchestrator runs), [[nstack/pr-with-evidence/SKILL|pr-with-evidence]]. Retired stubs: `orchestrate` (split into nstack-design + nstack-orchestrate on 2026-10-09) and `grill-with-human`, `design-first-feature`, `split-into-issues` (now phases of nstack-design). Bot-store ids: `sand-workflow:nstack-design`, `sand-workflow:nstack-orchestrate`. GitHub repos only, with GitHub Issues as the sole work tracker. Both seat skills describe the roles independently of their host. In Paseo, the plugin supplies read-only GitHub observation and orchestrator dispatch.
 
 # nstack: map
 
-Two seats, neither writes product code or merges. The **designer seat** ([[nstack/nstack-design/SKILL|nstack-design]]) works with you present: grill → design → slice → **design PR merge** (your one approval of design + slices) → files the issues at the merge SHA, seeds the board, and marks the Ready ones ready for work. The **orchestrator seat** ([[nstack/nstack-orchestrate/SKILL|nstack-orchestrate]]) handles one signal at a time, statelessly: dispatches Ready cards to implementer workers under max-parallel + LLM budget, reviews every returned PR, bounces, hands PASSes to you, closes the loop on merge. Design work found by the orchestrator goes to Blocked / HITL and back to the designer.
+Two seats, neither writes product code or merges. The **designer seat** ([[nstack/nstack-design/SKILL|nstack-design]]) works with you present: grill → design → slice → **design PR merge** (your one approval of design + slices) → files the issues at the merge SHA and applies their workflow labels. An open issue with `stack:ready` automatically signals readiness. The **orchestrator seat** ([[nstack/nstack-orchestrate/SKILL|nstack-orchestrate]]) handles one signal at a time, statelessly: dispatches Ready issues to implementer workers under max-parallel + LLM budget, reviews every returned PR, bounces, hands PASSes to you, closes the loop on merge or issue closure. Design work found by the orchestrator goes to Blocked / HITL and back to the designer.
+
+Canonical labels and transitions: [nstack-orchestrate § Issue workflow](nstack-orchestrate/SKILL.md#issue-workflow). Designer/orchestrator agents create missing labels and replace the prior workflow label while preserving category labels. Conflicting workflow labels require human attention and prevent dispatch; closed issues are excluded from active counts and starts. The plugin watcher stays read-only, retains pause and duplicate protection, and uses label events so unrelated edits do not start Ready work again.
 
 ## Pipeline
 
@@ -34,13 +36,13 @@ DESIGNER SEAT: YOU present (nstack-design)
   [4] Design PR (transcript + design + slices) ── YOU MERGE = the one approval ── Design: path@sha
        │
        ▼
-  [5] File ── issues @ merge sha, blockers first, exactly as written ── seed board ── mark Ready issues ready for work
+  [5] File ── issues @ merge sha, blockers first, exactly as written ── apply workflow labels
        │
        │    Backlog | Ready | In progress | In review | Merge queue | Done | Blocked/HITL
-       ▼    (GitHub Project status + stack:* labels)
+       ▼    (canonical GitHub issue workflow labels)
 ORCHESTRATOR SEAT: one signal at a time (nstack-orchestrate)
   signals: issue ready for work | worker PR opened | worker PR updated | your review feedback | CI result | PR merged | PR closed | your command (drain/review/retry/park/approve) | [time: optional sweep]
-  rebuild state from board + PRs + caps; duplicate signal = no-op
+  rebuild state from issues + PRs + caps; duplicate signal = no-op
   pick Ready AFK, disjoint scope, under max-parallel + LLM budget
        │
        ▼
@@ -61,11 +63,11 @@ ORCHESTRATOR SEAT: one signal at a time (nstack-orchestrate)
 
 ## Caps
 
-| Cap          | Default                                                                 |
-| ------------ | ----------------------------------------------------------------------- |
-| max-parallel | 3 (ceiling 5); disjoint L-rows only                                     |
-| LLM budget   | human-set daily/per-drain; else uncapped; park when next card won't fit |
-| Bounce       | 3 → HITL                                                                |
+| Cap          | Default                                                                  |
+| ------------ | ------------------------------------------------------------------------ |
+| max-parallel | 3 (ceiling 5); disjoint L-rows only                                      |
+| LLM budget   | human-set daily/per-drain; else uncapped; park when next issue won't fit |
+| Bounce       | 3 → HITL                                                                 |
 
 ## Who runs what
 
@@ -73,7 +75,7 @@ ORCHESTRATOR SEAT: one signal at a time (nstack-orchestrate)
 | ------------------------------------------------------------------------- | ------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Designer: triage → grill → design → slice → design PR → file + mark ready | `nstack-design` (you present)                     | Pocock `grill-with-docs`, `prototype` + `codebase-design` + `domain-modeling`, `to-tickets` (+ `to-spec` for small changes), `handoff` | New feature (or settled bug); design amendments         | **design PR merge** = design + slices + file permission (must carry the transcript and ≥1 artifact inline under `## Outcome`; body shape: `nstack-design/references/pr-body.md`, per [[2026-10-09 Design PR description for humans]]). Small change: your explicit OK before filing |
 | Orchestrator: dispatch + review + bounce + hand-off                       | `nstack-orchestrate` (review via `auto-reviewer`) | drain ≈ `implement-spec` (nstack caps win); review = Pocock `code-review` two-axis                                                     | One signal at a time (see nstack-orchestrate § Signals) | merge queue; HITL; escalations; your commands                                                                                                                                                                                                                                       |
-| Worker                                                                    | `implementer`                                     | Pocock `implement` + `tdd`                                                                                                             | Per Ready AFK card                                      | none (stops on drift)                                                                                                                                                                                                                                                               |
+| Worker                                                                    | `implementer`                                     | Pocock `implement` + `tdd`                                                                                                             | Per Ready AFK issue                                     | none (stops on drift)                                                                                                                                                                                                                                                               |
 | PR evidence / brief                                                       | `pr-with-evidence`                                | luoling8192 `create-pr-with-evidence`                                                                                                  | Author in worker PRs; brief after PASS                  | **you merge**                                                                                                                                                                                                                                                                       |
 | Learn                                                                     | `lessons-ledger`                                  | Pocock `retro` lenses                                                                                                                  | Nightly                                                 | owner decisions                                                                                                                                                                                                                                                                     |
 
@@ -85,7 +87,7 @@ ORCHESTRATOR SEAT: one signal at a time (nstack-orchestrate)
 
 1. Grill transcript → design (designer; transcript attached to the design PR)
 2. `docs/design/<feature>.md` (incl. Slices) @ merge SHA
-3. Issue / card: `Design: path@sha` + L/S/B + AFK/HITL + blockers, filed by the designer; Ready issues marked ready for work (= the hand-off signal)
+3. Issue: `Design: path@sha` + L/S/B + AFK/HITL + blockers, filed by the designer; applying `stack:ready` to an open issue is the hand-off signal
 4. Worker PR (dispatched by the orchestrator): same pin + verification record @ head
 5. Orchestrator auto-review @ head
 6. Reviewer brief @ head + merge command
@@ -98,5 +100,5 @@ Drift without approved Amendments → FAIL. Two same-shape deviations → scrap 
 - project-pm anti-job vs workers opening PRs (one permission line)
 - No deterministic design-conformance CI yet
 - INCONCLUSIVE without CI / `verify-*`
-- Concurrent signal handling can race on a card; claim-first + re-read narrows it, nothing makes it atomic
+- Concurrent signal handling can race on an issue; claim-first + re-read narrows it, nothing makes it atomic
 - Box `gh` 2.46 vs blocked-by 2.94

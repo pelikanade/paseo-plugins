@@ -27,30 +27,20 @@ const repositorySchema = z
   })
   .strict();
 
-const projectSchema = z
-  .object({
-    id: identifierSchema,
-    number: z.number().int().positive(),
-    title: identifierSchema,
-    url: z.url(),
-  })
-  .strict();
-
-const statusFieldSchema = z
-  .object({ id: identifierSchema, name: identifierSchema })
-  .strict();
-
-const readyValueSchema = z
-  .object({ id: identifierSchema, name: identifierSchema })
-  .strict();
+export const workflowLabels = {
+  backlog: "stack:backlog",
+  ready: "stack:ready",
+  building: "stack:in-progress",
+  reviewing: "stack:in-review",
+  mergeQueue: "stack:merge-queue",
+  needsYou: "stack:hitl",
+  done: "stack:done",
+} as const;
 
 export const bindingSchema = z
   .object({
     workspaceId: identifierSchema,
     repository: repositorySchema,
-    project: projectSchema,
-    statusField: statusFieldSchema,
-    readyValue: readyValueSchema,
     paused: z.boolean(),
     checkEverySeconds: z.number().int().min(10).max(86_400),
     repairEverySeconds: z.number().int().min(60).max(604_800).nullable(),
@@ -74,7 +64,7 @@ export type SignalKind = z.infer<typeof signalKindSchema>;
 
 export const githubProblemSchema = z
   .object({
-    kind: z.enum(["project_scope", "authentication", "permission"]),
+    kind: z.enum(["authentication", "permission"]),
     hostname: z.string(),
     message: z.string(),
   })
@@ -162,53 +152,6 @@ export const saveSettingsRpc = defineRpc({
     })
     .strict(),
   output: panelStateSchema,
-});
-
-export const statusOptionSchema = z
-  .object({ id: identifierSchema, name: identifierSchema })
-  .strict();
-
-export const discoveredFieldSchema = z
-  .object({
-    id: identifierSchema,
-    name: identifierSchema,
-    options: z.array(statusOptionSchema),
-  })
-  .strict();
-
-export const discoveredProjectSchema = z
-  .object({
-    id: identifierSchema,
-    number: z.number().int().positive(),
-    title: identifierSchema,
-    url: z.url(),
-    fields: z.array(discoveredFieldSchema),
-  })
-  .strict();
-export const discoverySchema = z
-  .object({
-    login: identifierSchema,
-    projects: z.array(discoveredProjectSchema),
-  })
-  .strict();
-
-export type Discovery = z.infer<typeof discoverySchema>;
-export type DiscoveredProject = z.infer<typeof discoveredProjectSchema>;
-export type DiscoveredField = z.infer<typeof discoveredFieldSchema>;
-
-export const discoverRpc = defineRpc({
-  name: "nstack.github.discover",
-  input: z
-    .object({
-      workspaceId: identifierSchema,
-      owner: identifierSchema,
-      repository: identifierSchema,
-    })
-    .strict(),
-  output: z.union([
-    discoverySchema,
-    z.object({ problem: githubProblemSchema }).strict(),
-  ]),
 });
 
 export const testConnectionRpc = defineRpc({

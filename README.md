@@ -21,7 +21,7 @@ plugins/
   hello-paseo/                  # Official starter: client surface + daemon RPC
   devenv/                       # Trust-gated environments + Bend2 policy
   generative-ui/                # Native Chat cards + scoped MCP + agent skill
-  paseo-nstack/                 # GitHub Project watcher + nstack agent dispatch
+  paseo-nstack/                 # GitHub issue watcher + nstack agent dispatch
 scripts/
   create-plugin.mjs             # Wraps the pinned Paseo scaffold
 skills/
@@ -117,7 +117,7 @@ The [filler-noise plugin](plugins/filler-noise/README.md) hides assistant rows w
 
 The [loop plugin](plugins/loop/README.md) re-runs a prompt in the same agent on a local schedule. `/loop 5m check deploy` arms a fixed interval; a prompt with no interval asks the agent to choose a heartbeat or watcher. Loops stop with the agent and are not cloud automations.
 
-The [paseo-nstack plugin](plugins/paseo-nstack/README.md) watches one GitHub repository and Project binding per Paseo workspace, then starts a fresh write-enabled orchestrator agent for Ready work, pull-request transitions, CI results, authenticated-human feedback, commands, and repair checks. Its workspace panel owns watcher health, pause, provider, model, and schedule settings; nstack policy remains in the vendored skills.
+The [paseo-nstack plugin](plugins/paseo-nstack/README.md) watches one GitHub repository binding per Paseo workspace, then starts a fresh write-enabled orchestrator agent for open issues labeled `stack:ready`, pull-request transitions, CI results, authenticated-human feedback, commands, and repair checks. Its workspace panel owns watcher health, pause, provider, model, and schedule settings; canonical issue workflow labels and nstack policy remain in the vendored skills.
 
 The [ESLint configuration](eslint.config.mjs) follows [AsterisMono/obsidian-agent](https://github.com/AsterisMono/obsidian-agent/blob/main/eslint.config.mjs), with generated environment directories ignored. It enables strict type-aware checks, exhaustive switches, rejects unsafe assertions and unhandled promises (including `void`), and forbids source comments.
 

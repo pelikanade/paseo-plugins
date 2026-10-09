@@ -13,7 +13,6 @@ export class GitHubAccessError extends Error {
 export interface GitHubOptions {
   hostname: string;
   restBaseUrl: string;
-  graphqlUrl: string;
 }
 
 const run = promisify(execFile);
@@ -21,83 +20,25 @@ const userSchema = z.object({ login: z.string() }).loose();
 const repositorySchema = z
   .object({ default_branch: z.string(), html_url: z.url() })
   .loose();
-const optionSchema = z.object({ id: z.string(), name: z.string() }).loose();
-const pageInfoSchema = z.object({
-  hasNextPage: z.boolean(),
-  endCursor: z.string().nullable(),
-});
-const fieldSchema = z
+const labelSchema = z.object({ name: z.string() }).loose();
+const issueSchema = z
   .object({
-    id: z.string(),
-    name: z.string(),
-    options: z.array(optionSchema).optional(),
-  })
-  .loose();
-const fieldsSchema = z.object({
-  nodes: z.array(fieldSchema.nullable()),
-  pageInfo: pageInfoSchema,
-});
-const projectSchema = z
-  .object({
-    id: z.string(),
     number: z.number().int(),
     title: z.string(),
-    url: z.url(),
-    fields: fieldsSchema,
+    html_url: z.url(),
+    state: z.enum(["open", "closed"]),
+    labels: z.array(labelSchema),
+    pull_request: z.object({}).loose().optional(),
   })
   .loose();
-const ownerProjectsSchema = z
+const issueEventSchema = z
   .object({
-    projectsV2: z.object({
-      nodes: z.array(projectSchema.nullable()),
-      pageInfo: pageInfoSchema,
-    }),
+    id: z.number().int(),
+    event: z.string(),
+    created_at: z.string(),
+    label: labelSchema.optional(),
   })
-  .nullable()
-  .optional();
-const discoverySchema = z.object({
-  repository: z.object({ id: z.string() }).nullable(),
-  organization: ownerProjectsSchema,
-  user: ownerProjectsSchema,
-});
-const projectFieldsPageSchema = z.object({
-  node: z.object({ fields: fieldsSchema }).nullable(),
-});
-const fieldValueSchema = z
-  .object({
-    optionId: z.string().nullable(),
-    name: z.string().nullable(),
-    updatedAt: z.string(),
-  })
-  .nullable();
-const contentSchema = z
-  .object({
-    __typename: z.enum(["Issue", "PullRequest"]),
-    number: z.number().int(),
-    title: z.string(),
-    url: z.url(),
-  })
-  .loose()
-  .nullable();
-const itemSchema = z.object({
-  id: z.string(),
-  updatedAt: z.string(),
-  content: contentSchema,
-  fieldValueByName: fieldValueSchema,
-});
-const projectItemsPageSchema = z.object({
-  node: z
-    .object({
-      items: z.object({
-        nodes: z.array(itemSchema.nullable()),
-        pageInfo: z.object({
-          hasNextPage: z.boolean(),
-          endCursor: z.string().nullable(),
-        }),
-      }),
-    })
-    .nullable(),
-});
+  .loose();
 const pullSchema = z
   .object({
     number: z.number().int(),
@@ -150,44 +91,25 @@ const checkRunsSchema = z
 const combinedStatusSchema = z
   .object({ state: z.string(), sha: z.string(), total_count: z.number().int() })
   .loose();
-const graphqlEnvelopeSchema = z
-  .object({
-    data: z.unknown().optional(),
-    errors: z
-      .array(
-        z.object({ message: z.string(), type: z.string().optional() }).loose(),
-      )
-      .optional(),
-  })
-  .loose();
 
 export type Repository = z.infer<typeof repositorySchema>;
-export type ProjectItem = z.infer<typeof itemSchema>;
+export type Issue = z.infer<typeof issueSchema>;
+export type IssueEvent = z.infer<typeof issueEventSchema>;
 export type Pull = z.infer<typeof pullSchema>;
 export type Comment = z.infer<typeof commentSchema>;
 export type Review = z.infer<typeof reviewSchema>;
 export type CheckRun = z.infer<typeof checkRunSchema>;
 export type CombinedStatus = z.infer<typeof combinedStatusSchema>;
-export interface GitHubDiscovery {
-  login: string;
-  projects: Array<{
-    id: string;
-    number: number;
-    title: string;
-    url: string;
-    fields: Array<{
-      id: string;
-      name: string;
-      options: Array<{ id: string; name: string }>;
-    }>;
-  }>;
-}
 
 export interface GitHub {
   login(): Promise<string>;
   repository(owner: string, name: string): Promise<Repository>;
-  discover(owner: string, repositoryName: string): Promise<GitHubDiscovery>;
-  projectItems(projectId: string, fieldName: string): Promise<ProjectItem[]>;
+  issues(owner: string, name: string): Promise<Issue[]>;
+  issueEvents(
+    owner: string,
+    name: string,
+    number: number,
+  ): Promise<IssueEvent[]>;
   pulls(
     owner: string,
     name: string,
@@ -279,40 +201,6 @@ export function createGitHub(
     return schema.parse(body);
   }
 
-  async function graphql<T>(
-    schema: z.ZodType<T>,
-    query: string,
-    variables: Record<string, unknown>,
-  ): Promise<T> {
-    const envelope = await request(graphqlEnvelopeSchema, options.graphqlUrl, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ query, variables }),
-    });
-    if (envelope.errors && envelope.errors.length > 0) {
-      if (
-        envelope.errors.some(
-          (error) =>
-            error.type === "INSUFFICIENT_SCOPES" &&
-            /['"](?:read:)?project['"]/.test(error.message),
-        )
-      )
-        throw accessError(
-          "project_scope",
-          "Your GitHub token is missing permission to read Projects (read:project).",
-        );
-      const denied = envelope.errors.find(
-        (error) =>
-          error.type === "FORBIDDEN" || error.type === "INSUFFICIENT_SCOPES",
-      );
-      if (denied) throw accessError("permission", denied.message);
-      throw new Error(
-        `GitHub GraphQL: ${[...new Set(envelope.errors.map((error) => error.message))].join("; ")}`,
-      );
-    }
-    return schema.parse(envelope.data);
-  }
-
   async function login() {
     return (await request(userSchema, endpoint(options.restBaseUrl, "user")))
       .login;
@@ -328,121 +216,21 @@ export function createGitHub(
     );
   }
 
-  async function discover(owner: string, repositoryName: string) {
-    const query = `query Discover($owner: String!, $repository: String!, $organizationAfter: String, $userAfter: String, $includeOrganization: Boolean!, $includeUser: Boolean!) {
-      repository(owner: $owner, name: $repository) { id }
-      organization(login: $owner) @include(if: $includeOrganization) { projectsV2(first: 100, after: $organizationAfter) { nodes { id number title url fields(first: 100) { nodes { ... on ProjectV2SingleSelectField { id name options { id name } } } pageInfo { hasNextPage endCursor } } } pageInfo { hasNextPage endCursor } } }
-      user(login: $owner) @include(if: $includeUser) { projectsV2(first: 100, after: $userAfter) { nodes { id number title url fields(first: 100) { nodes { ... on ProjectV2SingleSelectField { id name options { id name } } } pageInfo { hasNextPage endCursor } } } pageInfo { hasNextPage endCursor } } }
-    }`;
-    const fieldsQuery = `query ProjectFields($project: ID!, $after: String!) {
-      node(id: $project) { ... on ProjectV2 { fields(first: 100, after: $after) { nodes { ... on ProjectV2SingleSelectField { id name options { id name } } } pageInfo { hasNextPage endCursor } } } }
-    }`;
-    const projects: Array<z.infer<typeof projectSchema>> = [];
-    let organizationAfter: string | null = null;
-    let userAfter: string | null = null;
-    let includeOrganization = true;
-    let includeUser = true;
-
-    function nextCursor(pageInfo: z.infer<typeof pageInfoSchema>) {
-      if (!pageInfo.hasNextPage) return null;
-      if (!pageInfo.endCursor)
-        throw new Error("GitHub pagination returned no next cursor");
-      return pageInfo.endCursor;
-    }
-
-    do {
-      const result = await graphql(discoverySchema, query, {
-        owner,
-        repository: repositoryName,
-        organizationAfter,
-        userAfter,
-        includeOrganization,
-        includeUser,
-      });
-      if (!result.repository)
-        throw new Error(`Repository ${owner}/${repositoryName} was not found`);
-      if (includeOrganization) {
-        const connection = result.organization?.projectsV2;
-        if (!connection) includeOrganization = false;
-        else {
-          for (const project of connection.nodes)
-            if (project) projects.push(project);
-          organizationAfter = nextCursor(connection.pageInfo);
-          includeOrganization = organizationAfter !== null;
-        }
-      }
-      if (includeUser) {
-        const connection = result.user?.projectsV2;
-        if (!connection) includeUser = false;
-        else {
-          for (const project of connection.nodes)
-            if (project) projects.push(project);
-          userAfter = nextCursor(connection.pageInfo);
-          includeUser = userAfter !== null;
-        }
-      }
-    } while (includeOrganization || includeUser);
-
-    const discovered = [];
-    for (const project of projects) {
-      const fields = [...project.fields.nodes];
-      let after = nextCursor(project.fields.pageInfo);
-      while (after !== null) {
-        const page: z.infer<typeof projectFieldsPageSchema> = await graphql(
-          projectFieldsPageSchema,
-          fieldsQuery,
-          { project: project.id, after },
-        );
-        if (!page.node)
-          throw new Error(`GitHub Project ${project.id} was not found`);
-        fields.push(...page.node.fields.nodes);
-        after = nextCursor(page.node.fields.pageInfo);
-      }
-      discovered.push({
-        id: project.id,
-        number: project.number,
-        title: project.title,
-        url: project.url,
-        fields: fields.flatMap((field) =>
-          field?.options
-            ? [
-                {
-                  id: field.id,
-                  name: field.name,
-                  options: field.options,
-                },
-              ]
-            : [],
-        ),
-      });
-    }
-    return { login: await login(), projects: discovered };
+  async function issues(owner: string, name: string) {
+    const entries = await paged(
+      issueSchema,
+      `repos/${encodeURIComponent(owner)}/${encodeURIComponent(name)}/issues?state=open&sort=created&direction=asc`,
+    );
+    return entries.filter(
+      (issue) => issue.state === "open" && !issue.pull_request,
+    );
   }
 
-  async function projectItems(projectId: string, fieldName: string) {
-    const query = `query ProjectItems($project: ID!, $field: String!, $after: String) {
-      node(id: $project) { ... on ProjectV2 { items(first: 100, after: $after) { nodes { id updatedAt content { __typename ... on Issue { number title url } ... on PullRequest { number title url } } fieldValueByName(name: $field) { ... on ProjectV2ItemFieldSingleSelectValue { optionId name updatedAt } } } pageInfo { hasNextPage endCursor } } } }
-    }`;
-    const items: ProjectItem[] = [];
-    let after: string | null = null;
-    do {
-      const page: z.infer<typeof projectItemsPageSchema> = await graphql(
-        projectItemsPageSchema,
-        query,
-        {
-          project: projectId,
-          field: fieldName,
-          after,
-        },
-      );
-      if (!page.node)
-        throw new Error(`GitHub Project ${projectId} was not found`);
-      items.push(...page.node.items.nodes.filter((item) => item !== null));
-      after = page.node.items.pageInfo.hasNextPage
-        ? page.node.items.pageInfo.endCursor
-        : null;
-    } while (after !== null);
-    return items;
+  async function issueEvents(owner: string, name: string, number: number) {
+    return paged(
+      issueEventSchema,
+      `repos/${encodeURIComponent(owner)}/${encodeURIComponent(name)}/issues/${number.toString()}/events`,
+    );
   }
 
   async function paged<T>(
@@ -530,8 +318,8 @@ export function createGitHub(
   return {
     login,
     repository,
-    discover,
-    projectItems,
+    issues,
+    issueEvents,
     pulls,
     issueComments,
     reviewComments,

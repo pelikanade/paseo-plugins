@@ -16,7 +16,6 @@ test(
         GH_TOKEN: "e2e-token",
         PASEO_NSTACK_GITHUB_HOST: "github.com",
         PASEO_NSTACK_GITHUB_REST_URL: fixture.baseUrl,
-        PASEO_NSTACK_GITHUB_GRAPHQL_URL: `${fixture.baseUrl}/graphql`,
       },
       tools: ["devenv", "opencode", "gh"],
     });
@@ -37,14 +36,6 @@ test(
     };
     const binding = {
       repository: { owner: "acme", name: "repo" },
-      project: {
-        id: "project-1",
-        number: 1,
-        title: "Delivery",
-        url: "https://github.com/orgs/acme/projects/1",
-      },
-      statusField: { id: "status-1", name: "Status" },
-      readyValue: { id: "ready-1", name: "Ready" },
       paused: false,
       checkEverySeconds: 86400,
       repairEverySeconds: 3600,
@@ -84,10 +75,7 @@ test(
     const spawned = agents.entries[0].agent;
     assert.equal(spawned.workspaceId, seed.workspaceId);
     assert.equal(spawned.title, "nstack · Issue #42 is Ready");
-    assert.equal(
-      spawned.labels["paseo-nstack-signal"],
-      "ready:item-42:2026-01-02T03:04:05.000Z",
-    );
+    assert.equal(spawned.labels["paseo-nstack-signal"], "ready:42:4201");
 
     const timeline = await f.client.fetchAgentTimeline(spawned.id);
     assert.ok(
@@ -134,11 +122,6 @@ test(
           entry.item.kind === "nstack-agent-started",
       ).length,
       1,
-    );
-    assert.ok(
-      fixture.requests.some(
-        (request) => request.method === "POST" && request.path === "/graphql",
-      ),
     );
 
     const panel = await f.rpc("paseo-nstack", "nstack.panel", {
@@ -479,12 +462,46 @@ test(
     );
     await page.keyboard.press("Control+K");
     await page.getByText("Automatic agents", { exact: true }).last().click();
-    await expect(
-      page.getByText("acme/repo · Delivery", { exact: true }),
-    ).toBeVisible();
+    await expect(page.getByText("acme/repo", { exact: true })).toBeVisible();
     await expect(
       page.getByText("Agent started: Issue #42 is Ready", { exact: true }),
     ).toBeVisible();
+    await page.getByRole("button", { name: "Settings", exact: true }).click();
+    await page
+      .getByRole("textbox", { name: "Owner", exact: true })
+      .fill("acme");
+    await page
+      .getByRole("textbox", { name: "Repository", exact: true })
+      .fill("repo");
+    await page
+      .getByRole("button", { name: "Test connection", exact: true })
+      .click();
+    await expect(
+      page.getByText("Connected as human", { exact: true }).last(),
+    ).toBeVisible();
+    await mkdir("test-results", { recursive: true });
+    await page.setViewportSize({ width: 1280, height: 960 });
+    await page
+      .getByText("Automatic agent settings", { exact: true })
+      .scrollIntoViewIfNeeded();
+    await page.screenshot({
+      path: "test-results/nstack-issue-settings.png",
+      fullPage: true,
+    });
+    await page
+      .getByRole("button", { name: "Save settings", exact: true })
+      .click();
+    await expect(
+      page.getByRole("textbox", { name: "Owner", exact: true }),
+    ).toBeHidden();
+    assert.deepEqual(
+      (
+        await f.rpc("paseo-nstack", "nstack.panel", {
+          workspaceId: seed.workspaceId,
+        })
+      ).binding.repository,
+      { owner: "acme", name: "repo" },
+    );
   },
 );
 
@@ -498,7 +515,6 @@ test(
         GH_TOKEN: "e2e-token",
         PASEO_NSTACK_GITHUB_HOST: "github.com",
         PASEO_NSTACK_GITHUB_REST_URL: fixture.baseUrl,
-        PASEO_NSTACK_GITHUB_GRAPHQL_URL: `${fixture.baseUrl}/graphql`,
       },
       tools: ["devenv", "opencode", "gh"],
     });
@@ -564,7 +580,6 @@ test(
         GH_TOKEN: "e2e-token",
         PASEO_NSTACK_GITHUB_HOST: "github.com",
         PASEO_NSTACK_GITHUB_REST_URL: fixture.baseUrl,
-        PASEO_NSTACK_GITHUB_GRAPHQL_URL: `${fixture.baseUrl}/graphql`,
       },
       tools: ["devenv", "opencode", "gh"],
     });
@@ -588,14 +603,6 @@ test(
       binding: {
         workspaceId: seed.workspaceId,
         repository: { owner: "acme", name: "repo" },
-        project: {
-          id: "project-1",
-          number: 1,
-          title: "Delivery",
-          url: "https://github.com/orgs/acme/projects/1",
-        },
-        statusField: { id: "status-1", name: "Status" },
-        readyValue: { id: "ready-1", name: "Ready" },
         paused: true,
         checkEverySeconds: 86400,
         repairEverySeconds: null,
@@ -657,7 +664,7 @@ test(
     );
     assert.equal(
       recoveredAgents.entries[0].agent.labels["paseo-nstack-signal"],
-      "ready:item-42:2026-01-02T03:04:05.000Z",
+      "ready:42:4201",
     );
     const retryStatePath = join(
       f.home,
@@ -713,37 +720,39 @@ test(
 );
 
 test(
-  "paseo-nstack paginates discovery and closed pull transitions",
+  "paseo-nstack paginates issues and closed pull transitions",
   { timeout: 120000 },
   async (t) => {
     const fixture = await githubFixture(t);
-    fixture.state.discoveryPagination = true;
+    fixture.state.issues.unshift(
+      ...Array.from({ length: 100 }, (_, index) => ({
+        number: index + 1000,
+        title: `Backlog ${index}`,
+        html_url: `https://github.com/acme/repo/issues/${index + 1000}`,
+        state: "open",
+        labels: [{ name: "stack:backlog" }],
+      })),
+    );
+    const history = fixture.state.issueEvents.get(42);
+    assert.ok(history);
+    history.unshift(
+      ...Array.from({ length: 100 }, (_, index) => ({
+        id: index + 4000,
+        event: "renamed",
+        created_at: "2026-01-01T00:00:00.000Z",
+      })),
+    );
     const f = await runtime(t, {
       env: {
         GH_TOKEN: "e2e-token",
         PASEO_NSTACK_GITHUB_HOST: "github.com",
         PASEO_NSTACK_GITHUB_REST_URL: fixture.baseUrl,
-        PASEO_NSTACK_GITHUB_GRAPHQL_URL: `${fixture.baseUrl}/graphql`,
       },
       tools: ["devenv", "opencode", "gh"],
     });
     const project = await f.project("nstack pagination", "nstack-pagination");
     const seed = await f.createAgent(project, "nstack pagination workspace");
     await f.install("paseo-nstack");
-
-    const discovery = await f.rpc("paseo-nstack", "nstack.github.discover", {
-      workspaceId: seed.workspaceId,
-      owner: "acme",
-      repository: "repo",
-    });
-    assert.deepEqual(
-      discovery.projects.map((candidate) => candidate.id),
-      ["project-1", "project-2"],
-    );
-    assert.deepEqual(
-      discovery.projects[0].fields.map((field) => field.id),
-      ["status-1", "priority-1"],
-    );
 
     const initial = await f.rpc("paseo-nstack", "nstack.panel", {
       workspaceId: seed.workspaceId,
@@ -762,14 +771,6 @@ test(
       binding: {
         workspaceId: seed.workspaceId,
         repository: { owner: "acme", name: "repo" },
-        project: {
-          id: "project-1",
-          number: 1,
-          title: "Delivery",
-          url: "https://github.com/orgs/acme/projects/1",
-        },
-        statusField: { id: "status-1", name: "Status" },
-        readyValue: { id: "ready-1", name: "Ready" },
         paused: true,
         checkEverySeconds: 86400,
         repairEverySeconds: null,
@@ -779,6 +780,10 @@ test(
     await f.rpc("paseo-nstack", "nstack.check.now", {
       workspaceId: seed.workspaceId,
     });
+    const synced = await f.rpc("paseo-nstack", "nstack.panel", {
+      workspaceId: seed.workspaceId,
+    });
+    assert.equal(synced.counts.ready, 1);
 
     const statePath = join(f.home, "plugin-data", "paseo-nstack", "state.json");
     const persisted = JSON.parse(await readFile(statePath, "utf8"));
@@ -827,13 +832,186 @@ test(
       ),
       false,
     );
-    assert.ok(
-      fixture.requests.some(
-        (request) =>
-          request.path === "/repos/acme/repo/pulls" &&
-          request.search.includes("state=closed") &&
-          request.search.includes("page=2"),
-      ),
+  },
+);
+
+test(
+  "paseo-nstack uses exclusive issue labels and discards stale Ready work",
+  { timeout: 120000 },
+  async (t) => {
+    const fixture = await githubFixture(t);
+    const ready = fixture.state.issues[0];
+    const events = fixture.state.issueEvents.get(42);
+    assert.ok(ready);
+    assert.ok(events);
+    const states = [
+      ["stack:in-progress"],
+      ["stack:in-review"],
+      ["stack:merge-queue"],
+      ["stack:hitl"],
+      ["stack:ready", "stack:done"],
+      ["stack:done"],
+      ["stack:backlog"],
+      ["bug"],
+    ];
+    fixture.state.issues.push(
+      ...states.map((labels, index) => ({
+        number: index + 43,
+        title: `Work ${index + 43}`,
+        html_url: `https://github.com/acme/repo/issues/${index + 43}`,
+        state: "open",
+        labels: labels.map((name) => ({ name })),
+      })),
+      {
+        ...ready,
+        number: 51,
+        state: "closed",
+      },
+      {
+        ...ready,
+        number: 52,
+        pull_request: {
+          url: "https://api.github.com/repos/acme/repo/pulls/52",
+        },
+      },
     );
+    const f = await runtime(t, {
+      env: {
+        GH_TOKEN: "e2e-token",
+        PASEO_NSTACK_GITHUB_HOST: "github.com",
+        PASEO_NSTACK_GITHUB_REST_URL: fixture.baseUrl,
+      },
+      tools: ["devenv", "opencode", "gh"],
+    });
+    const project = await f.project("nstack labels", "nstack-labels");
+    const seed = await f.createAgent(project, "nstack labels workspace");
+    await f.install("paseo-nstack");
+    const input = { workspaceId: seed.workspaceId };
+    const panel = () => f.rpc("paseo-nstack", "nstack.panel", input);
+    const check = () => f.rpc("paseo-nstack", "nstack.check.now", input);
+    const agents = async () =>
+      (
+        await f.client.fetchAgents({
+          filter: {
+            labels: { "paseo-nstack": "orchestrator" },
+            includeArchived: true,
+          },
+        })
+      ).entries;
+    const initial = await panel();
+    const provider = initial.providerOptions.find(
+      (option) => option.provider === "opencode" && option.supportsWrite,
+    );
+    assert.ok(provider);
+    await f.rpc("paseo-nstack", "nstack.settings.save", {
+      ...input,
+      defaults: {
+        automaticStarts: true,
+        agent: { provider: provider.provider, model: provider.model },
+      },
+      binding: {
+        ...input,
+        repository: { owner: "acme", name: "repo" },
+        paused: true,
+        checkEverySeconds: 86400,
+        repairEverySeconds: null,
+        agent: null,
+      },
+    });
+    assert.deepEqual(await check(), {
+      observed: 1,
+      started: 0,
+      handled: 0,
+      errors: 0,
+    });
+    const counts = await panel();
+    assert.deepEqual(counts.counts, {
+      ready: 1,
+      building: 1,
+      reviewing: 1,
+      mergeQueue: 1,
+      needsYou: 2,
+    });
+    assert.equal(
+      counts.attention.find((issue) => issue.number === 47)?.status,
+      "needs_you",
+    );
+    assert.equal(
+      counts.attention.find((issue) => issue.number === 45)?.url,
+      "https://github.com/acme/repo/issues/45",
+    );
+
+    ready.title = "Updated title";
+    ready.body = "Updated details";
+    ready.updated_at = "2026-01-02T04:00:00.000Z";
+    ready.labels.push({ name: "bug" });
+    events.push({
+      id: 4202,
+      event: "labeled",
+      label: { name: "bug" },
+      created_at: ready.updated_at,
+    });
+    assert.deepEqual(await check(), {
+      observed: 0,
+      started: 0,
+      handled: 1,
+      errors: 0,
+    });
+    events.push(
+      {
+        id: 4203,
+        event: "unlabeled",
+        label: { name: "stack:ready" },
+        created_at: "2026-01-02T04:01:00.000Z",
+      },
+      {
+        id: 4204,
+        event: "labeled",
+        label: { name: "stack:ready" },
+        created_at: "2026-01-02T04:02:00.000Z",
+      },
+    );
+    assert.deepEqual(await check(), {
+      observed: 1,
+      started: 0,
+      handled: 0,
+      errors: 0,
+    });
+
+    ready.labels.push({ name: "stack:hitl" });
+    const resumed = await f.rpc("paseo-nstack", "nstack.pause.set", {
+      ...input,
+      scope: "workspace",
+      paused: false,
+    });
+    assert.equal(resumed.counts.ready, 0);
+    assert.equal(resumed.counts.needsYou, 3);
+    assert.equal((await agents()).length, 0);
+    ready.labels = [{ name: "stack:ready" }, { name: "bug" }];
+    assert.deepEqual(await check(), {
+      observed: 1,
+      started: 1,
+      handled: 0,
+      errors: 0,
+    });
+    assert.equal(
+      (await agents())[0].agent.labels["paseo-nstack-signal"],
+      "ready:42:4204",
+    );
+    assert.deepEqual(await check(), {
+      observed: 0,
+      started: 0,
+      handled: 1,
+      errors: 0,
+    });
+    ready.state = "closed";
+    assert.deepEqual(await check(), {
+      observed: 0,
+      started: 0,
+      handled: 0,
+      errors: 0,
+    });
+    assert.equal((await panel()).counts.ready, 0);
+    assert.equal((await agents()).length, 1);
   },
 );

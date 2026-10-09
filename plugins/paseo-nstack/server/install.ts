@@ -3,7 +3,6 @@ import type { PluginCleanup } from "@getpaseo/plugin";
 import type { PluginServerContext } from "@getpaseo/plugin/server";
 import {
   checkNowRpc,
-  discoverRpc,
   panelRpc,
   saveSettingsRpc,
   setPauseRpc,
@@ -281,6 +280,11 @@ export function installWatcher(
       return { observed: 0, started: 0, handled: 0, errors: 1 };
     }
 
+    const readySignals = new Set(
+      collection.signals
+        .filter((found) => found.kind === "ready")
+        .map((found) => found.key),
+    );
     let observed = 0;
     let handled = 0;
     let intents: Launch[];
@@ -315,6 +319,12 @@ export function installWatcher(
           ).toISOString(),
         };
 
+        database.pending = database.pending.filter(
+          (pending) =>
+            pending.workspaceId !== workspaceId ||
+            pending.kind !== "ready" ||
+            readySignals.has(pending.key),
+        );
         for (const found of collection.signals) {
           const known =
             database.pending.some(
@@ -380,6 +390,8 @@ export function installWatcher(
         database.pending = remaining;
         for (const launch of database.launches) {
           if (launch.workspaceId !== workspaceId || launch.state !== "failed")
+            continue;
+          if (launch.signal.kind === "ready" && !readySignals.has(launch.key))
             continue;
           if (launch.attempts >= MAX_LAUNCH_ATTEMPTS) {
             launch.state = "blocked";
@@ -677,46 +689,23 @@ export function installWatcher(
     );
     return panel(input.workspaceId);
   });
-  server.handle(discoverRpc, async (input, context) => {
-    await bind(context.paseo);
-    try {
-      return await github.discover(input.owner, input.repository);
-    } catch (error) {
-      if (error instanceof GitHubAccessError) return { problem: error.problem };
-      throw error;
-    }
-  });
   server.handle(testConnectionRpc, async (input, context) => {
     await bind(context.paseo);
     try {
       const choice = input.binding.agent ?? input.defaults.agent;
       if (!choice)
         throw new Error("Choose the plugin's default provider and model");
-      const discovery = await github.discover(
-        input.binding.repository.owner,
-        input.binding.repository.name,
-      );
-      const project = discovery.projects.find(
-        (candidate) => candidate.id === input.binding.project.id,
-      );
-      const field = project?.fields.find(
-        (candidate) => candidate.id === input.binding.statusField.id,
-      );
-      if (!project || !field)
-        throw new Error(
-          "The selected GitHub Project or status field is unavailable",
-        );
-      if (
-        !field.options.some(
-          (option) => option.id === input.binding.readyValue.id,
-        )
-      )
-        throw new Error("The selected Ready value is unavailable");
+      const { owner, name } = input.binding.repository;
+      const [login] = await Promise.all([
+        github.login(),
+        github.repository(owner, name),
+        github.issues(owner, name),
+      ]);
       await starter.validate(context.paseo, choice);
       return {
         ok: true,
-        login: discovery.login,
-        message: `Connected as ${discovery.login}`,
+        login,
+        message: `Connected as ${login}`,
         githubProblem: null,
       };
     } catch (error) {
@@ -772,13 +761,7 @@ export function installWatcher(
 }
 
 function bindingIdentity(binding: Binding) {
-  return [
-    binding.repository.owner,
-    binding.repository.name,
-    binding.project.id,
-    binding.statusField.id,
-    binding.readyValue.id,
-  ].join("\u0000");
+  return [binding.repository.owner, binding.repository.name].join("\u0000");
 }
 
 function agentIdentity(choice: Binding["agent"]) {

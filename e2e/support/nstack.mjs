@@ -2,142 +2,65 @@ import assert from "node:assert/strict";
 import { once } from "node:events";
 import { createServer } from "node:http";
 export async function githubFixture(t) {
-  const requests = [];
   const state = {
+    issues: [
+      {
+        number: 42,
+        title: "Ship the watcher",
+        html_url: "https://github.com/acme/repo/issues/42",
+        state: "open",
+        labels: [{ name: "stack:ready" }],
+      },
+    ],
+    issueEvents: new Map([
+      [
+        42,
+        [
+          {
+            id: 4201,
+            event: "labeled",
+            label: { name: "stack:ready" },
+            created_at: "2026-01-02T03:04:05.000Z",
+          },
+        ],
+      ],
+    ]),
     pulls: [],
     issueComments: [],
     reviewComments: [],
     repositoryFailure: false,
-    discoveryPagination: false,
     statuses: new Map([
       ["main", { state: "success", sha: "main-sha", total_count: 1 }],
     ]),
   };
-  const server = createServer(async (request, response) => {
+  const server = createServer((request, response) => {
     const url = new URL(request.url, "http://fixture.invalid");
-    const chunks = [];
-    for await (const chunk of request) chunks.push(chunk);
-    const text = Buffer.concat(chunks).toString("utf8");
-    const body = text ? JSON.parse(text) : null;
-    requests.push({
-      method: request.method,
-      path: url.pathname,
-      search: url.search,
-      body,
-    });
     response.setHeader("content-type", "application/json");
 
-    if (request.method === "POST" && url.pathname === "/graphql") {
-      if (body.query.includes("query Discover")) {
-        const secondPage =
-          state.discoveryPagination &&
-          body.variables.organizationAfter === "project-page-1";
-        const project = secondPage
-          ? {
-              id: "project-2",
-              number: 2,
-              title: "Operations",
-              url: "https://github.com/orgs/acme/projects/2",
-              fields: {
-                nodes: [],
-                pageInfo: { hasNextPage: false, endCursor: null },
-              },
-            }
-          : {
-              id: "project-1",
-              number: 1,
-              title: "Delivery",
-              url: "https://github.com/orgs/acme/projects/1",
-              fields: {
-                nodes: [
-                  {
-                    id: "status-1",
-                    name: "Status",
-                    options: [
-                      { id: "ready-1", name: "Ready" },
-                      { id: "building-1", name: "In progress" },
-                    ],
-                  },
-                ],
-                pageInfo: state.discoveryPagination
-                  ? { hasNextPage: true, endCursor: "field-page-1" }
-                  : { hasNextPage: false, endCursor: null },
-              },
-            };
-        response.end(
-          JSON.stringify({
-            data: {
-              repository: { id: "repository-1" },
-              organization: {
-                projectsV2: {
-                  nodes: [project],
-                  pageInfo:
-                    state.discoveryPagination && !secondPage
-                      ? {
-                          hasNextPage: true,
-                          endCursor: "project-page-1",
-                        }
-                      : { hasNextPage: false, endCursor: null },
-                },
-              },
-              user: null,
-            },
-          }),
-        );
-        return;
-      }
-      if (body.query.includes("query ProjectFields")) {
-        response.end(
-          JSON.stringify({
-            data: {
-              node: {
-                fields: {
-                  nodes: [
-                    {
-                      id: "priority-1",
-                      name: "Priority",
-                      options: [{ id: "high-1", name: "High" }],
-                    },
-                  ],
-                  pageInfo: { hasNextPage: false, endCursor: null },
-                },
-              },
-            },
-          }),
-        );
-        return;
-      }
-      if (body.query.includes("query ProjectItems")) {
-        response.end(
-          JSON.stringify({
-            data: {
-              node: {
-                items: {
-                  nodes: [
-                    {
-                      id: "item-42",
-                      updatedAt: "2026-01-02T03:04:05.000Z",
-                      content: {
-                        __typename: "Issue",
-                        number: 42,
-                        title: "Ship the watcher",
-                        url: "https://github.com/acme/repo/issues/42",
-                      },
-                      fieldValueByName: {
-                        optionId: "ready-1",
-                        name: "Ready",
-                        updatedAt: "2026-01-02T03:04:05.000Z",
-                      },
-                    },
-                  ],
-                  pageInfo: { hasNextPage: false, endCursor: null },
-                },
-              },
-            },
-          }),
-        );
-        return;
-      }
+    if (
+      request.method === "GET" &&
+      url.pathname === "/repos/acme/repo/issues"
+    ) {
+      const page = Number(url.searchParams.get("page") ?? "1");
+      const perPage = Number(url.searchParams.get("per_page") ?? "100");
+      const issues = state.issues.filter((issue) => issue.state === "open");
+      response.end(
+        JSON.stringify(issues.slice((page - 1) * perPage, page * perPage)),
+      );
+      return;
+    }
+    const eventsPath =
+      request.method === "GET"
+        ? /^\/repos\/acme\/repo\/issues\/(\d+)\/events$/.exec(url.pathname)
+        : null;
+    if (eventsPath) {
+      const events = state.issueEvents.get(Number(eventsPath[1])) ?? [];
+      const page = Number(url.searchParams.get("page") ?? "1");
+      const perPage = Number(url.searchParams.get("per_page") ?? "100");
+      response.end(
+        JSON.stringify(events.slice((page - 1) * perPage, page * perPage)),
+      );
+      return;
     }
 
     if (request.method === "GET" && url.pathname === "/user") {
@@ -228,7 +151,6 @@ export async function githubFixture(t) {
   });
   return {
     baseUrl: `http://127.0.0.1:${address.port}`,
-    requests,
     state,
   };
 }

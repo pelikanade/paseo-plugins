@@ -33,7 +33,7 @@ Pinned reading: mattpocock/skills `main` @ `b0618bc` (2026-10-08). If upstream h
 
 ### Host-neutral translation
 
-- Upstream's "tell the user to run `/setup-matt-pocock-skills`" for the tracker is Claude-Code/slash-command setup. In nstack the tracker is the PR's own repo (GitHub Issues), or `.nstack/kanban.md` on Cursor Origin. Never stop to ask for setup.
+- Upstream's "tell the user to run `/setup-matt-pocock-skills`" for the tracker is Claude-Code/slash-command setup. In nstack the tracker is GitHub Issues in the PR's own repository. Never stop to ask for tracker setup.
 - Upstream runs local `git diff <fixed>...HEAD`. Here the same range comes from GitHub reads: base = the PR base's merge-base, head = the PR head SHA (`get_pull_request`, `get_pull_request_diff`, `list_pull_request_files`, or a compare at those SHAs).
 - "Spawn sub-agents" means whatever read-only helper agents the host offers. No helper available → run the two axes as two separate passes, each starting from only its own inputs, and still report them apart.
 
