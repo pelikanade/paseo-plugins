@@ -1,7 +1,7 @@
 # Design: paseo-nstack
 
-Issue: none — direct build authorized   Grill: `docs/design/_intake/paseo-nstack-grill.md` @ 2026-10-09   Prototype: `proto/paseo-nstack-clean-ui` @ `accd29a`   Artifact: `docs/design/assets/paseo-nstack/panel-final.png`   Scaffold: none
-Glossary: `GLOSSARY.md` (+9 terms)   ADRs: `docs/adr/0001-keep-orchestration-in-agents.md`
+Issue: none — direct build authorized Grill: `docs/design/_intake/paseo-nstack-grill.md` @ 2026-10-09 Prototype: `proto/paseo-nstack-clean-ui` @ `accd29a` Artifact: `docs/design/assets/paseo-nstack/panel-final.png` Scaffold: none
+Glossary: `GLOSSARY.md` (+9 terms) ADRs: `docs/adr/0001-keep-orchestration-in-agents.md`
 Method: mattpocock/skills @ `b0618bc` (prototype, codebase-design, domain-modeling, to-tickets)
 Approval: the user approved direct implementation with “Go” and selected the final UI mix; no design PR was requested. Pin: this file's pre-implementation commit.
 
@@ -9,7 +9,7 @@ Approval: the user approved direct implementation with “Go” and selected the
 
 - **Done predicate:** With an enabled binding between a Paseo workspace and a GitHub repository/Project, a new supported signal starts exactly one fresh, write-enabled, auto-archived orchestrator agent in that workspace. The agent receives the signal, binding, and vendored nstack skill tree. The workspace panel shows watcher health and activity, and the started agent has one plugin timeline notice.
 - **Non-goals / out of boundary:** Reimplement nstack routing, budgets, parallel limits, review rounds, overlap checks, CI-hold policy, merge policy, or worker behavior in TypeScript; merge pull requests; schedule `lessons-ledger`; use GitHub webhooks; store a PAT; require approval for each signal; expose issue cards already visible in GitHub; provide a project switcher; send operating-system notifications; publish generative-ui cards.
-- **Constraints found while grounding:** Plugins run client and server code in separate runtimes. `PaseoApi` exists only in RPC and lifecycle callback contexts, so restored polling waits for the first such callback and reports `waiting_host` before then. Agent creation requires an explicit provider selector; one plugin default is therefore required, with an optional workspace override. GitHub Project state needs GraphQL; repository, pull-request, checks, and comments need REST. The host `gh` login supplies the token, which is never persisted. Server cleanup must stop timers and owned I/O. Tests are real isolated-daemon E2E only; no unit tests or mocked Paseo host/provider.
+- **Constraints found while grounding:** Plugins run client and server code in separate runtimes. `PaseoApi` exists only in RPC and lifecycle callback contexts, so restored polling waits for the first such callback; opening the panel or a host lifecycle event supplies it. Agent creation requires an explicit provider selector; one plugin default is therefore required, with an optional workspace override. GitHub Project state needs GraphQL; repository, pull-request, checks, and comments need REST. The host `gh` login supplies the token, which is never persisted. Server cleanup must stop timers and owned I/O. Tests are real isolated-daemon E2E only; no unit tests or mocked Paseo host/provider.
 
 ## 2. Usage (caller's view, written first)
 
@@ -40,7 +40,7 @@ export default function contribute(client: PluginClientContext) {
   const cleanups = [
     client.addWorkspacePanel({
       id: "nstack",
-      title: "Auto Agents",
+      title: "Automatic agents",
       icon: "Bot",
       context: "workspace",
       Component: NstackPanel,
@@ -87,26 +87,26 @@ await rpc(checkNowRpc, { workspaceId });
   - **P1 Initial synchronization:** Dispatch currently Ready Project items once. Seed PR, CI, review, and comment cursors without replaying historical activity; the repair check covers stale or missed work.
   - **P2 Signal identity:** A handled-signal key includes binding ID, signal kind, GitHub subject identity, and occurrence version such as status update time, head SHA, conclusion, comment ID, or repair window.
   - **P3 Ready authorization:** An enabled binding is standing permission to act on a currently Ready item. The prompt states that polling cannot identify the Project field-change actor; human comments and commands are still filtered to the login returned by GitHub `/user`.
-  - **P4 Launch recovery:** Persist intent, stable agent ID, stable idempotency key, and event labels before creation. Explicit failures may retry the same intent; ambiguous outcomes reconcile the stable agent ID and never create a fresh identity.
-  - **P5 Defaults:** Poll every 60 seconds. Run repair checks hourly. Both are configurable; repair can be off. Activity history is bounded to the newest 200 entries and handled keys are retained while their binding exists.
+  - **P4 Launch recovery:** Persist intent, stable agent ID, stable idempotency key, and event labels before creation. Reconcile the stable ID before every create and again after an error. Configuration failures remain blocked until the effective provider/model changes. Other failures use 30-second exponential backoff capped at 15 minutes and five attempts.
+  - **P5 Defaults and retention:** Poll every 60 seconds. Run repair checks hourly. Both are configurable; repair can be off. Activity history is bounded to the newest 200 entries. Exact-duplicate launch history remains available up to 50,000 records per workspace; paused signals stop at 5,000 and cursors at 50,000. A full buffer rejects the observation transaction without advancing cursors, preserving existing work until the operator resumes or rebinds.
   - **P6 Global and workspace controls:** The settings modal edits the plugin provider/model default and global automatic-start state, plus the current workspace binding and optional model override. The header pause affects only the current workspace.
 
 ## 4. Code layout (the conformance contract)
 
-| ID | Path or glob | New/Mod | Owns |
-|----|--------------|---------|------|
-| L1 | `plugins/paseo-nstack/{paseo-plugin.json,package.json,tsconfig.json,README.md,index.server.ts,index.client.tsx}` | New | Plugin metadata, package scripts, runtime entry wiring, operator documentation |
-| L2 | `plugins/paseo-nstack/shared/contracts.ts` | New | Zod RPC contracts, panel DTOs, binding drafts, signal/notice schemas |
-| L3 | `plugins/paseo-nstack/server/install.ts` | New | S1 installation interface, RPC/hook registration, lazy Paseo binding, timer ownership, cleanup, private workflow coordination |
-| L4 | `plugins/paseo-nstack/server/state.ts` | New | Versioned JSON, serialized mutations, atomic temp/write/rename, bounded history, launch intents and recovery records |
-| L5 | `plugins/paseo-nstack/server/github.ts` | New | `gh auth token`, authenticated REST/GraphQL, pagination, user identity, project/field discovery, health |
-| L6 | `plugins/paseo-nstack/server/signals.ts` | New | Ready, PR, CI, human feedback/command, and repair collectors; cursor evolution and stable handled-signal keys |
-| L7 | `plugins/paseo-nstack/server/spawn.ts` | New | Provider/mode validation, skill-tree materialization, prompt assembly, stable agent creation, labels, timeline append |
-| L8 | `plugins/paseo-nstack/{skills/nstack/**,server/skills.generated.ts,verify/skills.mjs}` | New | Vendored nstack source, generated exact skill map, generation/verification command and provenance |
-| L9 | `plugins/paseo-nstack/client/panel.tsx` | New | One workspace dashboard, settings modal, query keys containing `workspaceId`, pause/check/test/save actions |
-| L10 | `plugins/paseo-nstack/client/notice.tsx` | New | Started-agent timeline schema renderer |
-| L11 | `e2e/paseo-nstack.e2e.mjs` | New | Local GitHub HTTP fixture plus real isolated daemon, real plugin RPC/agent records, reload, and browser observations |
-| L12 | `GLOSSARY.md`, `docs/adr/0001-keep-orchestration-in-agents.md`, `docs/design/**` | New | Domain language, durable architecture decision, transcript, design, and signed UI assets |
+| ID  | Path or glob                                                                                                     | New/Mod | Owns                                                                                                                          |
+| --- | ---------------------------------------------------------------------------------------------------------------- | ------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| L1  | `plugins/paseo-nstack/{paseo-plugin.json,package.json,tsconfig.json,README.md,index.server.ts,index.client.tsx}` | New     | Plugin metadata, package scripts, runtime entry wiring, operator documentation                                                |
+| L2  | `plugins/paseo-nstack/shared/contracts.ts`                                                                       | New     | Zod RPC contracts, panel DTOs, binding drafts, signal/notice schemas                                                          |
+| L3  | `plugins/paseo-nstack/server/install.ts`                                                                         | New     | S1 installation interface, RPC/hook registration, lazy Paseo binding, timer ownership, cleanup, private workflow coordination |
+| L4  | `plugins/paseo-nstack/server/state.ts`                                                                           | New     | Versioned JSON, serialized mutations, atomic temp/write/rename, bounded history, launch intents and recovery records          |
+| L5  | `plugins/paseo-nstack/server/github.ts`                                                                          | New     | `gh auth token`, authenticated REST/GraphQL, pagination, user identity, project/field discovery, health                       |
+| L6  | `plugins/paseo-nstack/server/signals.ts`                                                                         | New     | Ready, PR, CI, human feedback/command, and repair collectors; cursor evolution and stable handled-signal keys                 |
+| L7  | `plugins/paseo-nstack/server/spawn.ts`                                                                           | New     | Provider/mode validation, skill-tree materialization, prompt assembly, stable agent creation, labels, timeline append         |
+| L8  | `plugins/paseo-nstack/{skills/nstack/**,server/skills.generated.ts,verify/skills.mjs}`                           | New     | Vendored nstack source, generated exact skill map, generation/verification command and provenance                             |
+| L9  | `plugins/paseo-nstack/client/panel.tsx`                                                                          | New     | One workspace dashboard, settings modal, query keys containing `workspaceId`, pause/check/test/save actions                   |
+| L10 | `plugins/paseo-nstack/client/notice.tsx`                                                                         | New     | Started-agent timeline schema renderer                                                                                        |
+| L11 | `e2e/paseo-nstack.e2e.mjs`, `e2e/support/nstack.mjs`                                                             | New     | Local GitHub HTTP fixture plus real isolated daemon, real plugin RPC/agent records, reload, and browser observations          |
+| L12 | `GLOSSARY.md`, `docs/adr/0001-keep-orchestration-in-agents.md`, `docs/design/**`                                 | New     | Domain language, durable architecture decision, transcript, design, and signed UI assets                                      |
 
 **Public surface:**
 
@@ -129,21 +129,21 @@ Incidental allowlist: `pnpm-lock.yaml`, generated `server/skills.generated.ts`, 
 
 ## 5. Complexity and budget
 
-- **Moving parts:** One deep watcher runtime; atomic state document; one concrete GitHub client; three internal signal-source forms; one agent starter; one generated skill map; one workspace panel; one timeline renderer; one real E2E file.
+- **Moving parts:** One deep watcher runtime; atomic state document; one concrete GitHub client; three internal signal-source forms; one agent starter; one generated skill map; one workspace panel; one timeline renderer; one real E2E scenario file and its GitHub fixture.
 - **Risks / one-way doors:** The thin-watcher split is the one-way architecture decision recorded in ADR 0001. The crash gap between JSON and daemon creation can duplicate or lose work if stable identity reconciliation is wrong. Polling can hit rate limits or miss actor metadata. A provider may not expose write mode. Vendored skills can drift unless verification is exact. **Blast-radius fact:** enabling automatic starts grants the plugin permission to create write-enabled agents in that binding's workspace; pause blocks new starts but never cancels an already-created agent.
-- **Budget:** implementation code files ≤14 plus manifests/docs and vendored skill data · new implementation code files ≤14 · new public symbols = S1–S8 · new classes/services = 0 required (factories/closures and private modules) · net non-test TypeScript/JavaScript ≤1,300 · E2E ≤500 LOC · slices/issues ≤4 · external runtime dependencies = 0.
-- **Tolerance:** +25% files/LOC. **Gate result:** keep. The design exceeds the generic eight-file stop line, but the user explicitly retained the normal plugin split; 13 planned code files keep client/server/shared boundaries and generated-artifact verification visible.
+- **Budget:** implementation code files ≤14 plus manifests/docs and vendored skill data · new implementation code files ≤14 · new public surfaces = S1–S8 · new classes/services = 1 required for launch-error classification · net non-test TypeScript/JavaScript ≤3,600 · E2E plus fixture ≤1,100 LOC · slices/issues ≤4 · external runtime dependencies = 0.
+- **Tolerance:** +25% files/LOC. **Gate result:** keep. The reliability-reviewed implementation uses 11 source files, 3,589 non-test lines, and 1,073 E2E/fixture lines. The first grounded re-estimate was 3,200/650; recovery, retry, pagination, and corruption scenarios added 469 source lines and 456 executable-test lines without changing the public surface or architecture.
 
 ## 6. Behavior scenarios
 
-- **B1** WHEN a valid enabled workspace binding is saved and a Project item is currently Ready, THE SYSTEM SHALL start one fresh write-enabled auto-archived orchestrator agent in that workspace with the normalized signal, binding, and vendored skill path, then record one started-agent timeline notice — evidence: real isolated-daemon E2E observing the agent record, prompt/config, plugin state, and timeline.
-- **B2** WHEN the same signal occurrence is observed by repeated polls, check-now, or restart recovery, THE SYSTEM SHALL not start another agent and SHALL show “already handled” or the recovered launch state — evidence: E2E repeats the fixture response and restarts the daemon while agent count remains one.
-- **B3** WHEN global automatic starts or the workspace binding is paused, THE SYSTEM SHALL continue observing and reporting GitHub state but SHALL not reserve or start a new agent; resuming permits only still-applicable unhandled signals — evidence: E2E toggles each scope around a Ready transition.
-- **B4** WHEN a new worker PR opens or changes head, a PR merges/closes, a CI result settles, or the authenticated human posts review feedback or a recognized command, THE SYSTEM SHALL normalize that occurrence and start exactly one orchestrator agent with its subject, SHA/result/comment, actor, and URL — evidence: table-driven E2E states served through the same REST client used in production.
-- **B5** WHEN the repair interval becomes due, THE SYSTEM SHALL start one repair-check agent for that binding and time window; when repair is off, no repair signal is produced — evidence: E2E with a short configured interval and bounded wait.
-- **B6** WHEN `gh` authentication, GitHub HTTP, persisted state, provider/model validation, or agent creation fails, THE SYSTEM SHALL expose a redacted actionable health/activity error, keep the plugin process alive where safe, and recover on the next successful check without guessing a provider or creating duplicate agents — evidence: E2E failure/recovery transitions plus daemon logs without the token.
-- **B7** WHEN the plugin or daemon reloads, THE SYSTEM SHALL restore bindings, cursors, handled signals, activity, and launch intents; it SHALL report `waiting_host` until a callback supplies `PaseoApi`, then resume schedules without historical PR/CI/comment replay — evidence: isolated-daemon restart E2E.
-- **B8** WHEN the panel is opened in two workspaces, THE SYSTEM SHALL show independent bindings and activity keyed by each `workspaceId`, with no project switcher or issue cards; the settings modal SHALL contain watcher-owned settings only — evidence: real web UI browser observation in the isolated daemon and the signed prototype screenshot.
+- **B1** WHEN a valid enabled workspace binding is saved and a Project item is currently Ready, THE SYSTEM SHALL start one fresh write-enabled auto-archived orchestrator agent in that workspace with the normalized signal, binding, and vendored skill path, then record one started-agent timeline notice — evidence: real isolated-daemon E2E observing the agent title, workspace, stable signal label, plugin state, and timeline.
+- **B2** WHEN the same signal occurrence is observed by repeated polls, check-now, or restart recovery, THE SYSTEM SHALL not start another agent and SHALL show “already handled” or the recovered launch state — evidence: E2E repeats the fixture response and restarts the daemon while the agent count stays unchanged.
+- **B3** WHEN global automatic starts or the workspace binding is paused, THE SYSTEM SHALL continue observing and reporting GitHub state but SHALL not reserve or start a new agent; resuming dispatches the buffered signals to agents that re-read current GitHub state — evidence: E2E buffers PR, CI, and command signals under workspace pause, then drains them once and toggles the global pause gate.
+- **B4** WHEN a new worker PR opens or changes head, a PR merges/closes, a CI result settles, or the authenticated human posts review feedback or a recognized command, THE SYSTEM SHALL normalize that occurrence and start exactly one orchestrator agent with its subject, SHA/result/comment, actor, and URL — evidence: the real-daemon E2E drives open, head, merge, close, CI, feedback, and command transitions through the production REST client and asserts their persisted agent signal keys.
+- **B5** WHEN the repair interval becomes due, THE SYSTEM SHALL start one repair-check agent for that binding and time window; when repair is off, no repair signal is produced — evidence: E2E reloads persisted state with a due repair window and observes one repair-labeled agent; the nullable interval gates repair collection and wake scheduling.
+- **B6** WHEN `gh` authentication, GitHub HTTP, persisted state, provider/model validation, or agent creation fails, THE SYSTEM SHALL expose a redacted actionable health/activity error, keep the plugin process alive where safe, and recover on the next successful check without guessing a provider or creating duplicate agents — evidence: E2E covers GitHub 503/redaction/recovery, transient and corrupt state loads, stable-agent reconciliation, blocked configuration recovery, bounded retries, and launch backoff.
+- **B7** WHEN the plugin or daemon reloads, THE SYSTEM SHALL restore bindings, cursors, handled signals, activity, and launch intents, then resume schedules after an RPC or lifecycle callback supplies `PaseoApi` without historical PR/CI/comment replay — evidence: isolated plugin-reload and daemon-restart E2E.
+- **B8** WHEN the panel is opened in two workspaces, THE SYSTEM SHALL show independent bindings and activity keyed by each `workspaceId`, with no project switcher or issue cards; the settings modal SHALL contain watcher-owned settings only — evidence: two-workspace real-daemon assertions, real Web UI browser observation, and the signed prototype screenshot.
 
 ## 7. Slices (to-tickets; count ≤ budget `issues`; merge = permission to file)
 
@@ -187,4 +187,4 @@ None.
 
 ## Amendments
 
-None.
+- 2026-10-09: Reliability review added recoverable initialization, corrupt-state quarantine, stable-agent reconciliation, terminal and bounded launch failures, shutdown-safe scheduling, complete discovery/closed-PR pagination, comment-edit deduplication, and explicit state caps. The Project item scan remains complete because Ready detection and dashboard counts require the current board; review polling is skipped for pulls whose `updated_at` did not change.
