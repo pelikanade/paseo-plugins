@@ -159,6 +159,7 @@ export function initialWorkspaceState(workspaceId: string): WorkspaceState {
     health: {
       state: "waiting",
       message: "Waiting for Paseo",
+      githubProblem: null,
       login: null,
       lastCheckedAt: null,
       nextCheckAt: null,

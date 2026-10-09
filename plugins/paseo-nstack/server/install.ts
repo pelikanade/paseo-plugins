@@ -9,9 +9,10 @@ import {
   setPauseRpc,
   testConnectionRpc,
   type Binding,
+  type GitHubProblem,
   type PanelState,
 } from "../shared/contracts";
-import { createGitHub, type GitHubOptions } from "./github";
+import { createGitHub, GitHubAccessError, type GitHubOptions } from "./github";
 import { collectSignals, type Collection } from "./signals";
 import {
   createStarter,
@@ -126,6 +127,7 @@ export function installWatcher(
         ? {
             state: "error" as const,
             message: database.recoveryMessage,
+            githubProblem: null,
             login: null,
             lastCheckedAt: null,
             nextCheckAt: null,
@@ -270,7 +272,12 @@ export function installWatcher(
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "GitHub check failed";
-      await recordFailure(workspaceId, message, nowText);
+      await recordFailure(
+        workspaceId,
+        message,
+        nowText,
+        error instanceof GitHubAccessError ? error.problem : null,
+      );
       return { observed: 0, started: 0, handled: 0, errors: 1 };
     }
 
@@ -300,6 +307,7 @@ export function installWatcher(
         workspace.health = {
           state: "connected",
           message: `Connected as ${collection.login}`,
+          githubProblem: null,
           login: collection.login,
           lastCheckedAt: nowText,
           nextCheckAt: new Date(
@@ -508,6 +516,7 @@ export function installWatcher(
           ...workspace.health,
           state: "error",
           message,
+          githubProblem: null,
         };
         appendActivity(database, binding.workspaceId, {
           at: failedAt.toISOString(),
@@ -524,6 +533,7 @@ export function installWatcher(
     workspaceId: string,
     message: string,
     checkedAt: string,
+    githubProblem: GitHubProblem | null = null,
   ) {
     await state.change((database) => {
       const workspace = workspaceState(database, workspaceId);
@@ -537,6 +547,7 @@ export function installWatcher(
         ...workspace.health,
         state: "error",
         message,
+        githubProblem,
         lastCheckedAt: checkedAt,
         nextCheckAt: binding
           ? new Date(
@@ -668,7 +679,12 @@ export function installWatcher(
   });
   server.handle(discoverRpc, async (input, context) => {
     await bind(context.paseo);
-    return github.discover(input.owner, input.repository);
+    try {
+      return await github.discover(input.owner, input.repository);
+    } catch (error) {
+      if (error instanceof GitHubAccessError) return { problem: error.problem };
+      throw error;
+    }
   });
   server.handle(testConnectionRpc, async (input, context) => {
     await bind(context.paseo);
@@ -701,11 +717,14 @@ export function installWatcher(
         ok: true,
         login: discovery.login,
         message: `Connected as ${discovery.login}`,
+        githubProblem: null,
       };
     } catch (error) {
       return {
         ok: false,
         login: null,
+        githubProblem:
+          error instanceof GitHubAccessError ? error.problem : null,
         message:
           error instanceof Error ? error.message : "Connection test failed",
       };

@@ -72,10 +72,20 @@ export const signalKindSchema = z.enum([
 ]);
 export type SignalKind = z.infer<typeof signalKindSchema>;
 
+export const githubProblemSchema = z
+  .object({
+    kind: z.enum(["project_scope", "authentication", "permission"]),
+    hostname: z.string(),
+    message: z.string(),
+  })
+  .strict();
+export type GitHubProblem = z.infer<typeof githubProblemSchema>;
+
 export const healthSchema = z
   .object({
     state: z.enum(["waiting", "connected", "checking", "error"]),
     message: z.string(),
+    githubProblem: githubProblemSchema.nullable().default(null),
     login: z.string().nullable(),
     lastCheckedAt: timestampSchema.nullable(),
     nextCheckAt: timestampSchema.nullable(),
@@ -195,7 +205,10 @@ export const discoverRpc = defineRpc({
       repository: identifierSchema,
     })
     .strict(),
-  output: discoverySchema,
+  output: z.union([
+    discoverySchema,
+    z.object({ problem: githubProblemSchema }).strict(),
+  ]),
 });
 
 export const testConnectionRpc = defineRpc({
@@ -212,6 +225,7 @@ export const testConnectionRpc = defineRpc({
       ok: z.boolean(),
       login: z.string().nullable(),
       message: z.string(),
+      githubProblem: githubProblemSchema.nullable(),
     })
     .strict(),
 });

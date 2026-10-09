@@ -6,7 +6,17 @@ Each workspace panel owns one binding to a GitHub repository, GitHub Project, an
 
 ## GitHub
 
-Authentication comes from `gh auth token`. The token remains in memory and is never written to plugin state.
+Authentication comes from `gh auth token --hostname <host>` on the machine running Paseo. Every GitHub API request reads the current token; neither the token nor the authenticated login is cached. Tokens are never written to plugin state.
+
+Project discovery and watching require `read:project`. For the full nstack workflow, which updates Project statuses, authorize the broader `project` scope:
+
+```console
+gh auth refresh --hostname github.com --scopes project
+```
+
+Complete GitHub authorization on the daemon host, then use **Check again** in **Automatic agents**. Credential changes in GitHub CLI take effect on the next request without reloading the plugin. If `GH_TOKEN` or `GITHUB_TOKEN` supplies the credential, update that environment value and restart the daemon so its processes inherit the change.
+
+Missing Project scope, invalid authentication, and other access denials appear as a single actionable notice. Settings show it beside the Project fields; background failures show it in the main panel. Checks continue on their normal schedule. **Check again** retries the failed discovery or connection test, or checks the saved workspace binding.
 
 Optional server environment variables:
 

@@ -1,6 +1,14 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { z } from "zod";
+import type { GitHubProblem } from "../shared/contracts";
+
+export class GitHubAccessError extends Error {
+  constructor(readonly problem: GitHubProblem) {
+    super(problem.message);
+    this.name = "GitHubAccessError";
+  }
+}
 
 export interface GitHubOptions {
   hostname: string;
@@ -145,7 +153,11 @@ const combinedStatusSchema = z
 const graphqlEnvelopeSchema = z
   .object({
     data: z.unknown().optional(),
-    errors: z.array(z.object({ message: z.string() }).loose()).optional(),
+    errors: z
+      .array(
+        z.object({ message: z.string(), type: z.string().optional() }).loose(),
+      )
+      .optional(),
   })
   .loose();
 
@@ -200,20 +212,28 @@ export function createGitHub(
   options: GitHubOptions,
   signal: AbortSignal,
 ): GitHub {
-  let token: string | undefined;
-  let account: string | undefined;
+  function accessError(kind: GitHubProblem["kind"], message: string) {
+    return new GitHubAccessError({ kind, message, hostname: options.hostname });
+  }
 
   async function authenticate() {
-    if (token) return token;
-    const result = await run(
-      "gh",
-      ["auth", "token", "--hostname", options.hostname],
-      { signal, maxBuffer: 1024 * 1024 },
-    );
-    token = result.stdout.trim();
-    if (token.length === 0)
-      throw new Error("gh returned an empty GitHub token");
-    return token;
+    try {
+      const result = await run(
+        "gh",
+        ["auth", "token", "--hostname", options.hostname],
+        { signal, maxBuffer: 1024 * 1024 },
+      );
+      const token = result.stdout.trim();
+      if (token.length === 0)
+        throw new Error("gh returned an empty GitHub token");
+      return token;
+    } catch (error) {
+      if (signal.aborted) throw error;
+      throw accessError(
+        "authentication",
+        "GitHub CLI could not provide a token on the machine running Paseo.",
+      );
+    }
   }
 
   function endpoint(base: string, path: string) {
@@ -236,14 +256,25 @@ export function createGitHub(
     });
     const body: unknown = await response.json();
     if (!response.ok) {
-      if (response.status === 401) token = undefined;
       const apiMessage = z
         .object({ message: z.string() })
         .loose()
         .safeParse(body);
-      throw new Error(
-        `GitHub ${response.status.toString()}: ${apiMessage.success ? apiMessage.data.message : response.statusText}`,
-      );
+      const message = apiMessage.success
+        ? apiMessage.data.message
+        : response.statusText;
+      if (response.status === 401)
+        throw accessError(
+          "authentication",
+          "GitHub rejected the token supplied by GitHub CLI.",
+        );
+      if (
+        response.status === 403 &&
+        response.headers.get("x-ratelimit-remaining") !== "0" &&
+        !/rate limit/i.test(message)
+      )
+        throw accessError("permission", message);
+      throw new Error(`GitHub ${response.status.toString()}: ${message}`);
     }
     return schema.parse(body);
   }
@@ -258,18 +289,33 @@ export function createGitHub(
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ query, variables }),
     });
-    if (envelope.errors && envelope.errors.length > 0)
-      throw new Error(
-        `GitHub GraphQL: ${envelope.errors.map((error) => error.message).join("; ")}`,
+    if (envelope.errors && envelope.errors.length > 0) {
+      if (
+        envelope.errors.some(
+          (error) =>
+            error.type === "INSUFFICIENT_SCOPES" &&
+            /['"](?:read:)?project['"]/.test(error.message),
+        )
+      )
+        throw accessError(
+          "project_scope",
+          "Your GitHub token is missing permission to read Projects (read:project).",
+        );
+      const denied = envelope.errors.find(
+        (error) =>
+          error.type === "FORBIDDEN" || error.type === "INSUFFICIENT_SCOPES",
       );
+      if (denied) throw accessError("permission", denied.message);
+      throw new Error(
+        `GitHub GraphQL: ${[...new Set(envelope.errors.map((error) => error.message))].join("; ")}`,
+      );
+    }
     return schema.parse(envelope.data);
   }
 
   async function login() {
-    if (account) return account;
-    account = (await request(userSchema, endpoint(options.restBaseUrl, "user")))
+    return (await request(userSchema, endpoint(options.restBaseUrl, "user")))
       .login;
-    return account;
   }
 
   async function repository(owner: string, name: string): Promise<Repository> {

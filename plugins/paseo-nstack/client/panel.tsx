@@ -23,6 +23,7 @@ import {
   type DiscoveredField,
   type DiscoveredProject,
   type Discovery,
+  type GitHubProblem,
   type PluginDefaults,
   type ProviderChoice,
 } from "../shared/contracts";
@@ -192,6 +193,102 @@ function Section({
   );
 }
 
+function AccessNotice({
+  theme,
+  problem,
+  busy,
+  onRetry,
+}: {
+  theme: Theme;
+  problem: GitHubProblem;
+  busy: boolean;
+  onRetry: () => void;
+}) {
+  const titles: Record<GitHubProblem["kind"], string> = {
+    project_scope: "GitHub Projects access needed",
+    authentication: "GitHub sign-in is not valid",
+    permission: "GitHub denied access",
+  };
+  const hostname = /^[a-zA-Z0-9.-]+$/.test(problem.hostname)
+    ? problem.hostname
+    : `'${problem.hostname.replace(/'/g, "'\\''")}'`;
+  const command =
+    problem.kind === "project_scope"
+      ? `gh auth refresh --hostname ${hostname} --scopes project`
+      : problem.kind === "authentication"
+        ? `gh auth login --hostname ${hostname}`
+        : null;
+  return (
+    <View
+      accessibilityRole="alert"
+      accessibilityState={{ busy }}
+      style={{
+        backgroundColor: theme.colors.surface1,
+        borderColor: theme.colors.border,
+        borderWidth: 1,
+        borderLeftColor: theme.colors.statusDanger,
+        borderLeftWidth: 3,
+        borderRadius: 8,
+        padding: 14,
+        gap: 10,
+      }}
+    >
+      <Text
+        accessibilityRole="header"
+        style={{
+          color: theme.colors.foreground,
+          fontWeight: "600",
+          fontSize: 14,
+        }}
+      >
+        {titles[problem.kind]}
+      </Text>
+      <Text style={{ color: theme.colors.foregroundMuted, fontSize: 13 }}>
+        {problem.message}
+      </Text>
+      {command ? (
+        <>
+          <Text style={{ color: theme.colors.foregroundMuted, fontSize: 12 }}>
+            On the machine running Paseo, run this command and complete GitHub
+            authorization:
+          </Text>
+          <Text
+            selectable
+            style={{
+              color: theme.colors.foreground,
+              backgroundColor: theme.colors.surface2,
+              padding: 10,
+              borderRadius: 6,
+              fontSize: 12,
+            }}
+          >
+            {command}
+          </Text>
+          <Text style={{ color: theme.colors.foregroundMuted, fontSize: 12 }}>
+            Then check again. No plugin reload is needed for GitHub CLI
+            credential changes. If gh uses GH_TOKEN or GITHUB_TOKEN, update the
+            daemon's environment and restart Paseo to apply it.
+          </Text>
+        </>
+      ) : (
+        <Text style={{ color: theme.colors.foregroundMuted, fontSize: 12 }}>
+          Check the GitHub account's repository and Project access, token
+          permissions, and organization authorization.
+        </Text>
+      )}
+      <View style={{ alignItems: "flex-start" }}>
+        <Action
+          theme={theme}
+          label={busy ? "Checking…" : "Check again"}
+          primary
+          disabled={busy}
+          onPress={onRetry}
+        />
+      </View>
+    </View>
+  );
+}
+
 function relativeTime(value: string | null) {
   if (!value) return "never";
   const seconds = Math.round((Date.now() - Date.parse(value)) / 1000);
@@ -215,7 +312,13 @@ export function NstackPanel(props: PluginWorkspacePanelProps) {
   });
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [lastGitHubAction, setLastGitHubAction] = useState<"discover" | "test">(
+    "discover",
+  );
+  const [error, setError] = useState<{
+    message: string;
+    githubProblem: GitHubProblem | null;
+  } | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [owner, setOwner] = useState("");
   const [repository, setRepository] = useState("");
@@ -232,18 +335,28 @@ export function NstackPanel(props: PluginWorkspacePanelProps) {
   );
   const view = query.data;
 
-  function perform(label: string, work: () => Promise<unknown>) {
+  function perform(
+    label: string,
+    work: () => Promise<GitHubProblem | undefined>,
+  ) {
     setBusy(label);
-    setError(null);
     setMessage(null);
-    work()
-      .then(() => query.refetch())
-      .then(() => {
-        setBusy(null);
+    Promise.resolve()
+      .then(work)
+      .then((problem) => {
+        setError(
+          problem ? { message: problem.message, githubProblem: problem } : null,
+        );
+        return query.refetch();
       })
       .catch((caught: unknown) => {
+        setError({
+          message: caught instanceof Error ? caught.message : `${label} failed`,
+          githubProblem: null,
+        });
+      })
+      .finally(() => {
         setBusy(null);
-        setError(caught instanceof Error ? caught.message : `${label} failed`);
       });
   }
 
@@ -272,9 +385,59 @@ export function NstackPanel(props: PluginWorkspacePanelProps) {
       setField(null);
       setReadyId(null);
     }
-    setError(null);
+    setError(
+      view.health.githubProblem
+        ? {
+            message: view.health.message,
+            githubProblem: view.health.githubProblem,
+          }
+        : null,
+    );
+    setLastGitHubAction("discover");
     setMessage(null);
     setSettingsOpen(true);
+  }
+
+  function findProjects() {
+    setLastGitHubAction("discover");
+    perform("discover", async () => {
+      const result = await discover({
+        workspaceId: props.workspaceId,
+        owner: owner.trim(),
+        repository: repository.trim(),
+      });
+      if ("problem" in result) {
+        setDiscovery(null);
+        return result.problem;
+      }
+      setDiscovery(result);
+      const selected =
+        result.projects.find((candidate) => candidate.id === project?.id) ??
+        result.projects.at(0) ??
+        null;
+      if (selected) selectProject(selected);
+      else {
+        setProject(null);
+        setField(null);
+        setReadyId(null);
+      }
+    });
+  }
+
+  function testGitHubConnection() {
+    setLastGitHubAction("test");
+    perform("test", async () => {
+      const result = await testConnection({
+        workspaceId: props.workspaceId,
+        defaults: defaults(),
+        binding: selectedBinding(),
+      });
+      if (!result.ok) {
+        if (result.githubProblem) return result.githubProblem;
+        throw new Error(result.message);
+      }
+      setMessage(result.message);
+    });
   }
 
   function selectProject(next: DiscoveredProject) {
@@ -333,7 +496,12 @@ export function NstackPanel(props: PluginWorkspacePanelProps) {
     return { automaticStarts, agent: defaultAgent };
   }
 
-  const failure = error ?? query.error?.message ?? null;
+  const failure = error?.message ?? query.error?.message ?? null;
+  const githubProblem = error
+    ? error.githubProblem
+    : settingsOpen
+      ? null
+      : (view?.health.githubProblem ?? null);
   const controlsDisabled = busy !== null || !view?.binding;
   const statusTone =
     view?.status === "error"
@@ -404,13 +572,14 @@ export function NstackPanel(props: PluginWorkspacePanelProps) {
               disabled={controlsDisabled}
               onPress={() => {
                 if (!view?.binding) return;
-                perform("pause", () =>
-                  setPause({
+                perform("pause", async () => {
+                  await setPause({
                     scope: "workspace",
                     workspaceId: props.workspaceId,
                     paused: !view.binding?.paused,
-                  }),
-                );
+                  });
+                  return undefined;
+                });
               }}
             />
             <Action
@@ -421,13 +590,14 @@ export function NstackPanel(props: PluginWorkspacePanelProps) {
               disabled={busy !== null || !view}
               onPress={() => {
                 if (!view) return;
-                perform("pause", () =>
-                  setPause({
+                perform("pause", async () => {
+                  await setPause({
                     scope: "all",
                     workspaceId: props.workspaceId,
                     paused: view.defaults.automaticStarts,
-                  }),
-                );
+                  });
+                  return undefined;
+                });
               }}
             />
             <Action
@@ -439,8 +609,11 @@ export function NstackPanel(props: PluginWorkspacePanelProps) {
                   checkNow({ workspaceId: props.workspaceId }).then(
                     (report) => {
                       setMessage(
-                        `${report.observed.toString()} observed · ${report.started.toString()} started · ${report.handled.toString()} already handled`,
+                        report.errors > 0
+                          ? null
+                          : `${report.observed.toString()} observed · ${report.started.toString()} started · ${report.handled.toString()} already handled`,
                       );
+                      return undefined;
                     },
                   ),
                 );
@@ -455,7 +628,23 @@ export function NstackPanel(props: PluginWorkspacePanelProps) {
           </View>
         </View>
 
-        {failure ? (
+        {!settingsOpen && githubProblem ? (
+          <AccessNotice
+            theme={props.theme}
+            problem={githubProblem}
+            busy={busy !== null || view?.health.state === "checking"}
+            onRetry={() => {
+              if (!view?.binding) {
+                setSettingsOpen(true);
+                return;
+              }
+              perform("check", async () => {
+                await checkNow({ workspaceId: props.workspaceId });
+                return undefined;
+              });
+            }}
+          />
+        ) : !settingsOpen && failure ? (
           <Text
             accessibilityRole="alert"
             style={{ color: props.theme.colors.statusDanger }}
@@ -733,24 +922,7 @@ export function NstackPanel(props: PluginWorkspacePanelProps) {
                     disabled={
                       busy !== null || !owner.trim() || !repository.trim()
                     }
-                    onPress={() => {
-                      perform("discover", () =>
-                        discover({
-                          workspaceId: props.workspaceId,
-                          owner: owner.trim(),
-                          repository: repository.trim(),
-                        }).then((result) => {
-                          setDiscovery(result);
-                          const selected =
-                            result.projects.find(
-                              (candidate) => candidate.id === project?.id,
-                            ) ??
-                            result.projects.at(0) ??
-                            null;
-                          if (selected) selectProject(selected);
-                        }),
-                      );
-                    }}
+                    onPress={findProjects}
                   />
                   {discovery ? (
                     <Text style={{ color: props.theme.colors.foregroundMuted }}>
@@ -761,6 +933,18 @@ export function NstackPanel(props: PluginWorkspacePanelProps) {
               </Section>
 
               <Section theme={props.theme} title="GitHub Project">
+                {githubProblem ? (
+                  <AccessNotice
+                    theme={props.theme}
+                    problem={githubProblem}
+                    busy={busy !== null}
+                    onRetry={
+                      lastGitHubAction === "test"
+                        ? testGitHubConnection
+                        : findProjects
+                    }
+                  />
+                ) : null}
                 <View
                   style={{ flexDirection: "row", flexWrap: "wrap", gap: 7 }}
                 >
@@ -951,7 +1135,7 @@ export function NstackPanel(props: PluginWorkspacePanelProps) {
                 </View>
               </Section>
 
-              {failure ? (
+              {failure && !githubProblem ? (
                 <Text
                   accessibilityRole="alert"
                   style={{ color: props.theme.colors.statusDanger }}
@@ -980,17 +1164,7 @@ export function NstackPanel(props: PluginWorkspacePanelProps) {
                     theme={props.theme}
                     label={busy === "test" ? "Testing…" : "Test connection"}
                     disabled={busy !== null}
-                    onPress={() => {
-                      perform("test", async () => {
-                        const result = await testConnection({
-                          workspaceId: props.workspaceId,
-                          defaults: defaults(),
-                          binding: selectedBinding(),
-                        });
-                        if (!result.ok) throw new Error(result.message);
-                        setMessage(result.message);
-                      });
-                    }}
+                    onPress={testGitHubConnection}
                   />
                   {view?.binding ? (
                     <Action
@@ -1006,6 +1180,7 @@ export function NstackPanel(props: PluginWorkspacePanelProps) {
                             binding: null,
                           }).then(() => {
                             setSettingsOpen(false);
+                            return undefined;
                           }),
                         );
                       }}
@@ -1025,6 +1200,7 @@ export function NstackPanel(props: PluginWorkspacePanelProps) {
                         binding: selectedBinding(),
                       });
                       setSettingsOpen(false);
+                      return undefined;
                     });
                   }}
                 />
