@@ -18,7 +18,7 @@ export interface ProviderOption {
   provider: string;
   model: string | null;
   label: string;
-  supportsWrite: boolean;
+  supportsFullAccess: boolean;
 }
 
 export class LaunchConfigurationError extends Error {}
@@ -94,8 +94,12 @@ export function createStarter(directory: string): Starter {
           const modes = await paseo.providers.listModes(entry.provider);
           if (modes.error) throw new Error(modes.error);
           const modeId = modes.modes?.find(
-            (mode) => mode.id === "write" || mode.id === "build",
+            (mode) =>
+              mode.id === "full" ||
+              (entry.provider === "opencode" && mode.id === "build"),
           )?.id;
+          const featureValues =
+            entry.provider === "opencode" ? { auto_accept: true } : undefined;
           const models = entry.models?.filter(
             (model) => model.isSelectable !== false,
           );
@@ -105,16 +109,18 @@ export function createStarter(directory: string): Starter {
                 provider: entry.provider,
                 model: null,
                 label: entry.provider,
-                supportsWrite: modeId !== undefined,
+                supportsFullAccess: modeId !== undefined,
                 modeId,
+                featureValues,
               },
             ];
           return models.map((model) => ({
             provider: entry.provider,
             model: model.id,
             label: `${entry.provider} · ${model.label}`,
-            supportsWrite: modeId !== undefined,
+            supportsFullAccess: modeId !== undefined,
             modeId,
+            featureValues,
           }));
         }),
     );
@@ -126,7 +132,7 @@ export function createStarter(directory: string): Starter {
       provider: configuration.provider,
       model: configuration.model,
       label: configuration.label,
-      supportsWrite: configuration.supportsWrite,
+      supportsFullAccess: configuration.supportsFullAccess,
     }));
   }
 
@@ -141,10 +147,11 @@ export function createStarter(directory: string): Starter {
       );
     if (!configuration.modeId)
       throw new LaunchConfigurationError(
-        `Provider ${choice.provider} has no write-capable mode`,
+        `Provider ${choice.provider} has no full-access mode`,
       );
     return {
       modeId: configuration.modeId,
+      featureValues: configuration.featureValues,
       selector: providerSelector(choice),
     };
   }
@@ -276,6 +283,7 @@ Handle only this signal. Re-read GitHub issue state and labels, apply nstack ide
         config: {
           provider: configuration.selector,
           modeId: configuration.modeId,
+          featureValues: configuration.featureValues,
         },
         title: `nstack · ${launch.signal.subject}`,
         prompt,

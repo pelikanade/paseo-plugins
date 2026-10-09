@@ -118,7 +118,7 @@ export const providerOptionSchema = z
     provider: identifierSchema,
     model: identifierSchema.nullable(),
     label: z.string(),
-    supportsWrite: z.boolean(),
+    supportsFullAccess: z.boolean(),
   })
   .strict();
 

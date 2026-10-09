@@ -6,6 +6,85 @@ import { expect } from "@playwright/test";
 import { runtime, until } from "./support/runtime.mjs";
 import { githubFixture } from "./support/nstack.mjs";
 
+for (const providerId of ["omp", "opencode"]) {
+  test(
+    `paseo-nstack starts ${providerId} orchestrators with full access`,
+    { timeout: 120000 },
+    async (t) => {
+      const fixture = await githubFixture(t);
+      const f = await runtime(t, {
+        isolateHome: true,
+        env: {
+          GH_TOKEN: "e2e-token",
+          ANTHROPIC_API_KEY: "paseo-e2e-placeholder-never-used",
+          PASEO_NSTACK_GITHUB_HOST: "github.com",
+          PASEO_NSTACK_GITHUB_REST_URL: fixture.baseUrl,
+        },
+        tools: [providerId, "gh"],
+        providers: { [providerId]: { enabled: true } },
+      });
+      const project = join(f.temporary, "full-access");
+      await mkdir(project);
+      const seed = await f.client.createAgent({
+        config: { provider: providerId, cwd: project },
+      });
+      await f.install("paseo-nstack");
+      const initial = await f.rpc("paseo-nstack", "nstack.panel", {
+        workspaceId: seed.workspaceId,
+      });
+      const provider = initial.providerOptions.find(
+        (option) => option.provider === providerId && option.supportsFullAccess,
+      );
+      assert.ok(provider, JSON.stringify(initial.providerOptions));
+      const access = new Map();
+      t.after(
+        f.client.on("agent_update", ({ payload }) => {
+          if (payload.kind !== "upsert" || payload.agent.archivedAt) return;
+          const agent = payload.agent;
+          access.set(agent.id, {
+            modeId: agent.currentModeId,
+            autoAccept: agent.features?.find(
+              (feature) => feature.id === "auto_accept",
+            )?.value,
+          });
+        }),
+      );
+      await f.rpc("paseo-nstack", "nstack.settings.save", {
+        workspaceId: seed.workspaceId,
+        defaults: {
+          automaticStarts: true,
+          agent: { provider: provider.provider, model: provider.model },
+        },
+        binding: {
+          workspaceId: seed.workspaceId,
+          repository: { owner: "acme", name: "repo" },
+          paused: false,
+          checkEverySeconds: 86400,
+          repairEverySeconds: null,
+          agent: null,
+        },
+      });
+      await f.rpc("paseo-nstack", "nstack.check.now", {
+        workspaceId: seed.workspaceId,
+      });
+      const agents = await f.client.fetchAgents({
+        filter: {
+          labels: { "paseo-nstack": "orchestrator" },
+          includeArchived: true,
+        },
+      });
+      assert.equal(agents.entries.length, 1);
+      const permissions = access.get(agents.entries[0].agent.id);
+      assert.ok(
+        permissions,
+        "Observed the created agent's live access settings",
+      );
+      assert.equal(permissions.modeId, providerId === "omp" ? "full" : "build");
+      if (providerId === "opencode") assert.equal(permissions.autoAccept, true);
+    },
+  );
+}
+
 test(
   "paseo-nstack dispatches once per workspace and survives restart",
   { timeout: 240000 },
@@ -27,7 +106,7 @@ test(
       workspaceId: seed.workspaceId,
     });
     const provider = initial.providerOptions.find(
-      (option) => option.provider === "opencode" && option.supportsWrite,
+      (option) => option.provider === "opencode" && option.supportsFullAccess,
     );
     assert.ok(provider, JSON.stringify(initial.providerOptions));
     const defaults = {
@@ -590,7 +669,7 @@ test(
       workspaceId: seed.workspaceId,
     });
     const provider = initial.providerOptions.find(
-      (option) => option.provider === "opencode" && option.supportsWrite,
+      (option) => option.provider === "opencode" && option.supportsFullAccess,
     );
     assert.ok(provider, JSON.stringify(initial.providerOptions));
     const defaults = {
@@ -758,7 +837,7 @@ test(
       workspaceId: seed.workspaceId,
     });
     const provider = initial.providerOptions.find(
-      (option) => option.provider === "opencode" && option.supportsWrite,
+      (option) => option.provider === "opencode" && option.supportsFullAccess,
     );
     assert.ok(provider, JSON.stringify(initial.providerOptions));
     const defaults = {
@@ -900,7 +979,7 @@ test(
       ).entries;
     const initial = await panel();
     const provider = initial.providerOptions.find(
-      (option) => option.provider === "opencode" && option.supportsWrite,
+      (option) => option.provider === "opencode" && option.supportsFullAccess,
     );
     assert.ok(provider);
     await f.rpc("paseo-nstack", "nstack.settings.save", {

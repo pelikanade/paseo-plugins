@@ -886,7 +886,7 @@ export function NstackPanel(props: PluginWorkspacePanelProps) {
                         defaultAgent?.provider === option.provider &&
                         defaultAgent.model === option.model
                       }
-                      disabled={!option.supportsWrite}
+                      disabled={!option.supportsFullAccess}
                       onPress={() => {
                         setDefaultAgent({
                           provider: option.provider,
@@ -924,7 +924,7 @@ export function NstackPanel(props: PluginWorkspacePanelProps) {
                         overrideAgent?.provider === option.provider &&
                         overrideAgent.model === option.model
                       }
-                      disabled={!option.supportsWrite}
+                      disabled={!option.supportsFullAccess}
                       onPress={() => {
                         setOverrideAgent({
                           provider: option.provider,

@@ -2,7 +2,9 @@
 
 A Paseo workspace watcher that turns GitHub issue workflow labels and repository changes into fresh nstack orchestrator agents.
 
-Each workspace panel owns one binding to a GitHub repository owner/name. Settings contain automatic-start pause, check and repair intervals, and agent provider/model configuration. The plugin reads GitHub, prevents exact duplicate starts, and creates a write-enabled agent in that workspace. Nstack policy remains in the vendored skills; this plugin does not reproduce worker limits, review rules, or merge policy.
+Each workspace panel owns one binding to a GitHub repository owner/name. Settings contain automatic-start pause, check and repair intervals, and agent provider/model configuration. The plugin reads GitHub, prevents exact duplicate starts, and creates an agent with full access in that workspace. Nstack policy remains in the vendored skills; this plugin does not reproduce worker limits, review rules, or merge policy.
+
+Orchestrators use the provider's `full` mode. OpenCode uses `build` with `auto_accept` enabled. Providers without either supported configuration cannot be selected for automatic starts. This applies to new launches; existing agents retain their original permissions.
 
 ## GitHub
 
