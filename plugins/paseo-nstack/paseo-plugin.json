@@ -1,6 +1,0 @@
-{
-  "id": "paseo-nstack",
-  "requirements": {
-    "paseo": ">=0.10.2"
-  }
-}
