@@ -37,7 +37,7 @@ Unsubmitted drafts are client-local, preserved across ordinary card updates but 
 
 Paseo compiles the source; no plugin bundler is required. Host React, React Native and Zod remain development dependencies. Each runtime stays in client, server or shared directories.
 
-After editing the skill or examples, run `pnpm --filter @paseo-plugins/generative-ui build:guide`. The generated neutral module lets the compiled plugin serve its skill without depending on its install directory. `verify` checks it against the packaged source files.
+After editing the skill or examples, run `pnpm --filter @pelikanade/paseo-plugin-generative-ui build:guide`. The generated neutral module lets the compiled plugin serve its skill without depending on its install directory. `verify` checks it against the packaged source files.
 
 Run the affected real daemon/browser E2E scenario, then `pnpm format` and `pnpm check`. Tests exercise every one of the 14 catalog components through the actual MCP transport and Web UI, plus plugin RPC, atomic patches, form submission, plugin reload and full daemon restart with Chat history synchronization. Coverage is compared with the real catalog so adding an untested component fails the scenario. Live model generation and iOS/Android device rendering require separate validation; neither is represented by a mocked provider.
 

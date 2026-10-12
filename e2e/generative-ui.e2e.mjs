@@ -104,7 +104,7 @@ test(
           "pnpm",
           [
             "--filter",
-            "@paseo-plugins/generative-ui",
+            "@pelikanade/paseo-plugin-generative-ui",
             "pack",
             "--out",
             archive,

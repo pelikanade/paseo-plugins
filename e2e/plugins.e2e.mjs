@@ -121,7 +121,13 @@ test(
         const archive = join(f.temporary, "devenv.tgz");
         await command(
           "pnpm",
-          ["--filter", "@paseo-plugins/devenv", "pack", "--out", archive],
+          [
+            "--filter",
+            "@pelikanade/paseo-plugin-devenv",
+            "pack",
+            "--out",
+            archive,
+          ],
           { cwd: root },
         );
         const files = await command("tar", ["-tf", archive]);

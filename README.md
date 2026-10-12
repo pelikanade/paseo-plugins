@@ -118,7 +118,13 @@ The [ESLint configuration](eslint.config.mjs) follows [AsterisMono/obsidian-agen
 
 Use `$paseo-plugin-dev` in an agent that discovers `.agents/skills`, or load [SKILL.md](skills/paseo-plugin-dev/SKILL.md) directly. Its [workflow reference](skills/paseo-plugin-dev/references/development.md) covers local reloads and release preparation.
 
-For distribution, start with the [Paseo publishing guide](https://paseo.sh/docs/plugins/publishing). Inspect package contents with:
+For distribution, start with the [Paseo publishing guide](https://paseo.sh/docs/plugins/publishing). The devenv, generative-ui, and filler-noise packages release on npm as `@pelikanade/paseo-plugin-<id>` at 0.1.0 under MIT; hello-paseo stays private as the starter. Publish one with:
+
+```sh
+pnpm --filter @pelikanade/paseo-plugin-devenv exec npm publish --access public
+```
+
+Inspect package contents with:
 
 ```sh
 pnpm --filter @paseo-plugins/hello-paseo exec npm pack --dry-run

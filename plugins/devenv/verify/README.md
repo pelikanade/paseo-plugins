@@ -16,8 +16,8 @@ The shell pins `github:bendlang/bend/b2111cf43244e65f76ddc278ee695e669f720cbf`, 
 
 ```sh
 devenv shell
-pnpm --filter @paseo-plugins/devenv build:model
-pnpm --filter @paseo-plugins/devenv verify
+pnpm --filter @pelikanade/paseo-plugin-devenv build:model
+pnpm --filter @pelikanade/paseo-plugin-devenv verify
 ```
 
 The verifier requires the exact version, executes `bend PROOF.bend`, requires a successful exit and `ALL PROOFS CHECK`, rejects `@unsafe` and all question-mark proof escapes or unfinished goals, checks claim coverage, and recompiles the artifact for a byte comparison. A missing Bend executable is a failure. `BEND_BIN` may select an explicit executable; it cannot bypass the version check.
