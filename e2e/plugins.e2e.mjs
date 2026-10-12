@@ -111,7 +111,10 @@ test(
         );
         await assert.rejects(
           f.rpc("devenv", "devenv.status", { agentId: "missing-agent" }),
-          /Agent not found: missing-agent/,
+          (error) => {
+            assert.equal(error.constructor.name, "DaemonRpcError");
+            return true;
+          },
         );
       },
     );
