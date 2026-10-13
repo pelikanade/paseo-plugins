@@ -42,9 +42,3 @@ export const statusRpc = defineRpc({
     })
     .strict(),
 });
-
-export const connectionRpc = defineRpc({
-  name: "secret-request.connection",
-  input: z.object({ agentId: agentIdSchema }).strict(),
-  output: z.object({ url: z.string(), token: z.string() }).strict(),
-});

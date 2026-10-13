@@ -24,15 +24,13 @@ type Props = PluginTimelineItemProps<SecretRequest>;
 
 type Tone = "neutral" | "accent" | "success" | "warning" | "danger";
 
-type HintKey = "none" | "whitespace" | "short" | "long" | "prefix";
-
 type ViewState = "form" | "delivered" | "canceled" | "gone" | "unavailable";
 
 type Busy = "send" | "cancel" | null;
 
 type CancelResult = { status: ResolvedStatus; message: string | null };
 
-type Notice = { message: string; action: "send" | "cancel" };
+type Notice = { message: string };
 
 type Copy = {
   headline: {
@@ -49,34 +47,19 @@ type Copy = {
     placeholder: string;
     a11yLabel: (label: string) => string;
   };
-  meta: {
-    wait: (minutes: number) => string;
-    noExpiry: string;
-    requestedAt: (time: string) => string;
-  };
+  meta: { wait: (minutes: number) => string };
   action: {
     send: string;
     sending: string;
     cancel: string;
-    retry: string;
   };
-  problem: { empty: string };
-  hint: {
-    whitespace: string;
-    short: string;
-    long: string;
-    prefix: string;
-  };
-  ready: string;
   idle: string;
   delivered: {
     noteBefore: string;
     noteAfter: string;
-    expired: string;
+    noDeadline: string;
     path: string;
   };
-  canceled: { line: string };
-  gone: { line: string };
   unavailable: { title: string; fallback: string };
   offline: string;
   error: { generic: string };
@@ -84,6 +67,7 @@ type Copy = {
 };
 
 const IDLE_MS = 5 * 60_000;
+const CLOCK_MS = 30_000;
 const POLL_MS = 5_000;
 
 const en: Copy = {
@@ -101,39 +85,23 @@ const en: Copy = {
     placeholder: "Paste or type the value",
     a11yLabel: (label) => `Secret value for ${label}`,
   },
-  meta: {
-    wait: (minutes) => `Waiting ${String(minutes)} min`,
-    noExpiry: "No time limit",
-    requestedAt: (time) => `Requested ${time}`,
-  },
+  meta: { wait: (minutes) => `Waiting ${String(minutes)} min` },
   action: {
     send: "Send to agent",
     sending: "Sending…",
     cancel: "Cancel",
-    retry: "Try again",
   },
-  problem: { empty: "Enter the value to send." },
-  hint: {
-    whitespace:
-      "Contains spaces or line breaks. Keep them if the value needs them.",
-    short: "Shorter than expected. You can still send.",
-    long: "Longer than expected. You can still send.",
-    prefix: "This looks like part of a config line. It will be sent as typed.",
-  },
-  ready: "Ready to send",
   idle: "Cleared after inactivity. Type it again.",
   delivered: {
     noteBefore:
-      "Passed to your agent; held in memory only and deleted automatically in ",
-    noteAfter: "",
-    expired: "Auto-delete time reached.",
+      "Passed to your agent; held in RAM only on a tmpfs file deleted automatically by ",
+    noteAfter: ".",
+    noDeadline:
+      "Passed to your agent; held in RAM only on a tmpfs file that is deleted automatically.",
     path: "The agent receives a file path it can read, not the value.",
   },
-  canceled: { line: "Canceled. The agent was told you declined." },
-  gone: { line: "Request interrupted. Ask the agent to request it again." },
   unavailable: {
-    title:
-      "Cannot hand over the value safely: no memory-backed mount on this host",
+    title: "The value could not be handed over safely",
     fallback: "The value was not sent and was not stored.",
   },
   offline: "Paseo is offline. Reconnect to send.",
@@ -156,36 +124,21 @@ const zh: Copy = {
     placeholder: "粘贴或输入该值",
     a11yLabel: (label) => `${label} 的密钥值`,
   },
-  meta: {
-    wait: (minutes) => `已等待 ${String(minutes)} 分钟`,
-    noExpiry: "无时间限制",
-    requestedAt: (time) => `请求于 ${time}`,
-  },
+  meta: { wait: (minutes) => `已等待 ${String(minutes)} 分钟` },
   action: {
     send: "发送给 Bot",
     sending: "发送中…",
     cancel: "取消",
-    retry: "重试",
   },
-  problem: { empty: "请输入要发送的值。" },
-  hint: {
-    whitespace: "包含空格或换行。如果该值需要，请保留它们。",
-    short: "比预期短。仍可发送。",
-    long: "比预期长。仍可发送。",
-    prefix: "这看起来像配置行的一部分。将按输入原样发送。",
-  },
-  ready: "可以发送",
   idle: "因长时间未操作已清空。请重新输入。",
   delivered: {
-    noteBefore: "已安全传递给你的 Bot，仅存于内存，",
-    noteAfter: " 后自动清除",
-    expired: "已到自动清除时间。",
+    noteBefore: "已安全传递给你的 Bot，仅存于内存盘，将于 ",
+    noteAfter: " 前自动清除。",
+    noDeadline: "已安全传递给你的 Bot，仅存于内存盘，会自动清除。",
     path: "Bot 收到的是可读取的文件路径，而不是值本身。",
   },
-  canceled: { line: "已取消。已告知 Bot 你未提供密钥。" },
-  gone: { line: "请求已中断。请让 Bot 重新请求。" },
   unavailable: {
-    title: "无法安全交接密钥：本机没有可用的内存盘",
+    title: "无法安全交接该值",
     fallback: "未发送，也未保存该值。",
   },
   offline: "Paseo 已离线。重新连接后即可发送。",
@@ -216,40 +169,14 @@ const toneColors = {
 const NETWORK_ERROR =
   /network|offline|fetch|disconnect|timeout|timed out|econn|socket|unreachable|connection/i;
 
-function formatClock(milliseconds: number): string {
-  const total = Math.ceil(milliseconds / 1000);
-  const minutes = Math.floor(total / 60);
-  const seconds = total % 60;
-  return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
-}
+const deadlineFormat = new Intl.DateTimeFormat(LOCALE, {
+  hour: "2-digit",
+  minute: "2-digit",
+});
 
-function classifyHint(
-  trimmed: string,
-  expectedLength: number | undefined,
-): HintKey {
-  if (trimmed.length === 0) return "none";
-  if (/^(export\s|Bearer\s|Authorization:)/.test(trimmed)) return "prefix";
-  if (expectedLength !== undefined && trimmed.length < expectedLength)
-    return "short";
-  if (expectedLength !== undefined && trimmed.length > expectedLength)
-    return "long";
-  if (/\s/.test(trimmed)) return "whitespace";
-  return "none";
-}
-
-function hintMessage(key: HintKey): string | null {
-  switch (key) {
-    case "none":
-      return null;
-    case "whitespace":
-      return copy.hint.whitespace;
-    case "short":
-      return copy.hint.short;
-    case "long":
-      return copy.hint.long;
-    case "prefix":
-      return copy.hint.prefix;
-  }
+function formatDeadline(iso: string): string {
+  const at = Date.parse(iso);
+  return Number.isNaN(at) ? "" : deadlineFormat.format(at);
 }
 
 function resolveView(status: ResolvedStatus): ViewState {
@@ -344,9 +271,6 @@ function makeStyles(
       lineHeight: 17,
       flexShrink: 1,
     },
-    countdown: { fontWeight: "600", fontVariant: ["tabular-nums"] },
-    dangerText: { color: colors.statusDanger },
-    warningText: { color: colors.statusWarning },
     field: { gap: 6 },
     input: {
       color: colors.foreground,
@@ -426,15 +350,8 @@ function Banner({
   );
 }
 
-export function SecretRequestCard({
-  agentId,
-  item,
-  timestamp,
-  theme,
-  layout,
-}: Props) {
-  const { requestId, label, description, hint, expectedLength, createdAt } =
-    item.data;
+export function SecretRequestCard({ agentId, item, theme, layout }: Props) {
+  const { requestId, label, description, hint, createdAt } = item.data;
   const readStatus = useRpc(statusRpc);
   const submit = useRpc(submitRpc);
   const cancel = useRpc(cancelRpc);
@@ -448,8 +365,6 @@ export function SecretRequestCard({
   const [notice, setNotice] = useState<Notice | null>(null);
   const [offline, setOffline] = useState(false);
   const [hasText, setHasText] = useState(false);
-  const [hintKey, setHintKey] = useState<HintKey>("none");
-  const [emptyRejected, setEmptyRejected] = useState(false);
   const [idleCleared, setIdleCleared] = useState(false);
   const [focused, setFocused] = useState(false);
   const [now, setNow] = useState(() => Date.now());
@@ -466,8 +381,6 @@ export function SecretRequestCard({
     buffer.current = "";
     inputRef.current?.clear();
     setHasText(false);
-    setHintKey("none");
-    setEmptyRejected(false);
   }, []);
 
   const syncStatus = useCallback(() => {
@@ -490,7 +403,7 @@ export function SecretRequestCard({
   useEffect(() => {
     const id = setInterval(() => {
       setNow(Date.now());
-    }, 1000);
+    }, CLOCK_MS);
     return () => {
       clearInterval(id);
     };
@@ -516,7 +429,7 @@ export function SecretRequestCard({
         clearBuffer();
         setIdleCleared(true);
       }
-    }, 1000);
+    }, CLOCK_MS);
     return () => {
       clearInterval(id);
     };
@@ -602,13 +515,12 @@ export function SecretRequestCard({
     }
   };
 
-  const declareFailure = (action: "send" | "cancel", error: unknown) => {
+  const declareFailure = (error: unknown) => {
     if (!(error instanceof Error) || NETWORK_ERROR.test(error.message)) {
       setOffline(true);
     } else {
       setNotice({
         message: error.message.length > 0 ? error.message : copy.error.generic,
-        action,
       });
     }
     syncStatus();
@@ -619,19 +531,11 @@ export function SecretRequestCard({
     lastInput.current = Date.now();
     const trimmed = text.trim();
     setIdleCleared(false);
-    setEmptyRejected(false);
     setHasText(trimmed.length > 0);
-    setHintKey(classifyHint(trimmed, expectedLength));
   };
 
   const onSend = () => {
-    if (busy !== null) return;
-    if (buffer.current.trim().length === 0) {
-      setEmptyRejected(true);
-      inputRef.current?.focus();
-      return;
-    }
-    setEmptyRejected(false);
+    if (busy !== null || buffer.current.trim().length === 0) return;
     setNotice(null);
     setBusy("send");
     const value = buffer.current.trim();
@@ -642,7 +546,7 @@ export function SecretRequestCard({
       })
       .catch((error: unknown) => {
         setBusy(null);
-        declareFailure("send", error);
+        declareFailure(error);
       });
   };
 
@@ -657,34 +561,23 @@ export function SecretRequestCard({
       })
       .catch((error: unknown) => {
         setBusy(null);
-        declareFailure("cancel", error);
+        declareFailure(error);
       });
-  };
-
-  const onRetry = () => {
-    if (notice === null) return;
-    if (notice.action === "cancel") onCancel();
-    else onSend();
   };
 
   const minutesWaiting = Math.max(
     0,
     Math.floor((now - Date.parse(createdAt)) / 60_000),
   );
-  const remaining =
-    handoffExpiresAt === null ? 0 : Date.parse(handoffExpiresAt) - now;
-  const warningHint =
-    hintKey === "short" || hintKey === "long" || hintKey === "prefix";
   const tone: Tone =
     view === "unavailable" || notice !== null
       ? "danger"
-      : offline || warningHint
+      : offline
         ? "warning"
         : viewTone(view);
   const toneColor = (value: Tone) => theme.colors[toneColors[value]];
   const disabled = busy !== null || offline;
   const sendDisabled = disabled || !hasText;
-  const retryable = notice !== null && status === "pending" && !offline;
 
   return (
     <View
@@ -731,14 +624,9 @@ export function SecretRequestCard({
             {requestId}
           </Text>
           {view === "form" ? (
-            <>
-              <Text testID="secret-request-wait" style={styles.muted}>
-                {copy.meta.wait(minutesWaiting)}
-              </Text>
-              <Text testID="secret-request-expiry" style={styles.muted}>
-                {copy.meta.noExpiry}
-              </Text>
-            </>
+            <Text testID="secret-request-wait" style={styles.muted}>
+              {copy.meta.wait(minutesWaiting)}
+            </Text>
           ) : null}
         </View>
         {view === "form" ? (
@@ -769,29 +657,6 @@ export function SecretRequestCard({
               }}
               style={[styles.input, focused ? styles.inputFocused : null]}
             />
-            {emptyRejected ? (
-              <Text
-                testID="secret-request-problem"
-                accessibilityRole="alert"
-                style={[styles.body, styles.dangerText]}
-              >
-                {copy.problem.empty}
-              </Text>
-            ) : hintKey !== "none" ? (
-              <Text
-                testID="secret-request-problem"
-                style={[
-                  styles.body,
-                  warningHint ? styles.warningText : styles.muted,
-                ]}
-              >
-                {hintMessage(hintKey)}
-              </Text>
-            ) : hasText ? (
-              <Text testID="secret-request-ready" style={styles.muted}>
-                {copy.ready}
-              </Text>
-            ) : null}
             {idleCleared ? (
               <Text testID="secret-request-idle" style={styles.muted}>
                 {copy.idle}
@@ -853,30 +718,14 @@ export function SecretRequestCard({
               accessibilityLiveRegion="polite"
               style={[styles.body, { color: toneColor("success") }]}
             >
-              {remaining > 0 ? (
-                <>
-                  {copy.delivered.noteBefore}
-                  <Text
-                    testID="secret-request-countdown"
-                    style={styles.countdown}
-                  >
-                    {formatClock(remaining)}
-                  </Text>
-                  {copy.delivered.noteAfter}
-                </>
-              ) : (
-                copy.delivered.expired
-              )}
+              {handoffExpiresAt === null
+                ? copy.delivered.noDeadline
+                : `${copy.delivered.noteBefore}${formatDeadline(handoffExpiresAt)}${copy.delivered.noteAfter}`}
             </Text>
             <Text testID="secret-request-delivered-note" style={styles.muted}>
               {copy.delivered.path}
             </Text>
           </View>
-        ) : null}
-        {view === "canceled" || view === "gone" ? (
-          <Text testID="secret-request-result" style={styles.body}>
-            {view === "canceled" ? copy.canceled.line : copy.gone.line}
-          </Text>
         ) : null}
         {view === "unavailable" ? (
           <Banner
@@ -904,23 +753,6 @@ export function SecretRequestCard({
             <Text testID="secret-request-error" style={styles.body}>
               {notice.message}
             </Text>
-            {retryable ? (
-              <Pressable
-                testID="secret-request-retry"
-                accessibilityRole="button"
-                accessibilityLabel={copy.action.retry}
-                accessibilityState={{ disabled }}
-                disabled={disabled}
-                onPress={onRetry}
-                style={({ pressed }) => [
-                  styles.button,
-                  styles.secondary,
-                  { opacity: disabled ? 0.5 : pressed ? 0.85 : 1 },
-                ]}
-              >
-                <Text style={styles.secondaryText}>{copy.action.retry}</Text>
-              </Pressable>
-            ) : null}
           </Banner>
         ) : null}
         {offline ? (
@@ -930,14 +762,6 @@ export function SecretRequestCard({
             </Text>
           </Banner>
         ) : null}
-        <Text testID="secret-request-timestamp" style={styles.muted}>
-          {copy.meta.requestedAt(
-            timestamp.toLocaleTimeString(LOCALE, {
-              hour: "2-digit",
-              minute: "2-digit",
-            }),
-          )}
-        </Text>
       </View>
     </View>
   );

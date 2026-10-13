@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { z } from "zod";
@@ -58,13 +58,9 @@ export class Storage {
 
   change<T>(operation: (database: Database) => T | Promise<T>): Promise<T> {
     return this.read(async (database) => {
-      const draft = databaseSchema.parse(JSON.parse(JSON.stringify(database)));
-      const result = await operation(draft);
+      const result = await operation(database);
       await mkdir(this.directory, { recursive: true, mode: 0o700 });
-      const temporary = `${this.path}.${randomUUID()}.tmp`;
-      await writeFile(temporary, JSON.stringify(draft), { mode: 0o600 });
-      await rename(temporary, this.path);
-      Object.assign(database, draft);
+      await writeFile(this.path, JSON.stringify(database), { mode: 0o600 });
       return result;
     });
   }

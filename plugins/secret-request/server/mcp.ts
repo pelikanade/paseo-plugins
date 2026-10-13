@@ -27,11 +27,16 @@ export class Gateway {
   private started: Promise<number> | undefined;
   private readonly connections = new Set<McpServer>();
 
+  private paseo: Api | undefined;
+
   constructor(
     private readonly requests: Requests,
     private readonly storage: Storage,
-    private readonly paseo: Api,
   ) {}
+
+  attach(paseo: Api): void {
+    this.paseo = paseo;
+  }
 
   start(): Promise<number> {
     this.started ??= (async () => {
@@ -61,17 +66,6 @@ export class Gateway {
     return `http://127.0.0.1:${String(await this.start())}/mcp`;
   }
 
-  async connection(agentId: string): Promise<{ url: string; token: string }> {
-    const token = await this.storage.read(
-      (database) =>
-        database.sessions.find((session) => session.agentId === agentId)
-          ?.token ?? null,
-    );
-    if (token === null)
-      throw new Error("No secret-request session is bound to this agent");
-    return { url: await this.url(), token };
-  }
-
   async createToken(): Promise<string> {
     const token = randomUUID();
     return this.storage.change((database) => {
@@ -99,10 +93,21 @@ export class Gateway {
     agentId: string,
     input: unknown,
   ): Promise<{ content: { type: "text"; text: string }[]; isError?: true }> {
+    const paseo = this.paseo;
+    if (paseo === undefined)
+      return {
+        content: [
+          {
+            type: "text",
+            text: "The secret-request plugin is still starting up. Retry this call in a moment.",
+          },
+        ],
+        isError: true,
+      };
     const result = await this.requests.request(
       agentId,
       requestInputSchema.parse(input),
-      this.paseo,
+      paseo,
     );
     if (result.status === "unavailable")
       return {
@@ -163,52 +168,19 @@ export class Gateway {
     }
     const server = new McpServer({ name: "secret-request", version: "0.1.0" });
     this.connections.add(server);
-    const result = (value: unknown) => ({
-      content: [{ type: "text" as const, text: JSON.stringify(value) }],
-    });
     server.registerTool(
       "request_secret",
       {
         description: [
-          "Ask the user for one secret and block until they answer.",
-          "Returns a path to a RAM-backed file holding the value; read it with $(cat <path>) and never print, log or echo what you read.",
-          "The card accepts a single line, so a multi-line secret (PEM, SSH key) has to be base64-encoded by the user — say so in `hint` with the exact command — or it arrives with its newlines stripped and you repair it.",
-          "The file is deleted 15 minutes after delivery, or earlier with secret_release.",
+          "Ask the user for one secret (API key, token, password) and block until they answer, cancel, or the request is gone.",
+          "Returns a path to a RAM-backed file holding the value, never the value itself: use $(cat <path>) inside the command that needs it.",
+          "Never print, log, echo or copy what you read, and never report its length, a prefix, a suffix or a hash of it either — size and fragments narrow a guess that should not be narrowed.",
+          "The card is a single-line masked field, so a multi-line secret (PEM, SSH key) either has to be base64-encoded by the user — put the exact command in `hint` — or arrives with its newlines stripped and you repair it.",
+          "The file is deleted 15 minutes after delivery, and nothing can delete it earlier, so read it only where the value is needed.",
         ].join(" "),
         inputSchema: requestInputSchema,
       },
       async (input) => this.call(agentId, input),
-    );
-    server.registerTool(
-      "secret_status",
-      {
-        description:
-          "Check a secret request without waiting. Reports pending, delivered, canceled or gone.",
-        inputSchema: z
-          .object({
-            requestId: z.string().min(1).max(100).optional(),
-            label: z.string().min(1).max(200).optional(),
-          })
-          .strict(),
-      },
-      ({ requestId, label }) => {
-        const found = this.requests.find(agentId, requestId, label);
-        if (found === null)
-          return result({ status: "gone", handoffExpiresAt: null });
-        return result(this.requests.status(agentId, found));
-      },
-    );
-    server.registerTool(
-      "secret_release",
-      {
-        description:
-          "Delete the handoff file for a delivered secret as soon as you are done with it.",
-        inputSchema: z
-          .object({ requestId: z.string().min(1).max(100) })
-          .strict(),
-      },
-      async ({ requestId }) =>
-        result({ status: await this.requests.release(agentId, requestId) }),
     );
     const transport = new StreamableHTTPServerTransport({
       sessionIdGenerator: undefined,

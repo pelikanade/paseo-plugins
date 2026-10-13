@@ -40,6 +40,31 @@ async function treeContains(directory, needle) {
   return null;
 }
 
+async function pluginConnection(f, agentId) {
+  return until(
+    async () => {
+      try {
+        const state = JSON.parse(
+          await readFile(
+            join(f.home, "plugin-data", "secret-request", "state.json"),
+            "utf8",
+          ),
+        );
+        const session = state.sessions.find((item) => item.agentId === agentId);
+        return state.port === 0 || session === undefined
+          ? null
+          : {
+              url: `http://127.0.0.1:${String(state.port)}/mcp`,
+              token: session.token,
+            };
+      } catch {
+        return null;
+      }
+    },
+    (value) => value !== null,
+  );
+}
+
 async function exists(path) {
   try {
     await stat(path);
@@ -60,23 +85,35 @@ test(
     let mcp;
     const connect = async () => {
       if (mcp) await mcp.close().catch(() => undefined);
-      const connection = await f.rpc(
-        "secret-request",
-        "secret-request.connection",
-        { agentId: agent.id },
+      mcp = await until(
+        async () => {
+          let client;
+          try {
+            const connection = await pluginConnection(f, agent.id);
+            client = new Client({
+              name: "secret-request-e2e",
+              version: "1.0.0",
+            });
+            await client.connect(
+              new StreamableHTTPClientTransport(new URL(connection.url), {
+                requestInit: {
+                  headers: { Authorization: `Bearer ${connection.token}` },
+                },
+              }),
+            );
+            await client.listTools();
+            await f.rpc("secret-request", "secret-request.status", {
+              agentId: agent.id,
+              requestId: "00000000-0000-0000-0000-000000000000",
+            });
+            return client;
+          } catch {
+            await client?.close().catch(() => undefined);
+            return null;
+          }
+        },
+        (value) => value !== null,
       );
-      const client = new Client({
-        name: "secret-request-e2e",
-        version: "1.0.0",
-      });
-      await client.connect(
-        new StreamableHTTPClientTransport(new URL(connection.url), {
-          requestInit: {
-            headers: { Authorization: `Bearer ${connection.token}` },
-          },
-        }),
-      );
-      mcp = client;
     };
     await connect();
     t.after(() => mcp?.close());
@@ -126,11 +163,10 @@ test(
       "the real MCP transport blocks, then hands over a RAM-backed path",
       async () => {
         const tools = await mcp.listTools();
-        assert.deepEqual(tools.tools.map((tool) => tool.name).sort(), [
-          "request_secret",
-          "secret_release",
-          "secret_status",
-        ]);
+        assert.deepEqual(
+          tools.tools.map((tool) => tool.name),
+          ["request_secret"],
+        );
         const { pending, item } = await request("Test password", "Any value.");
         const requestId = item.item.data.requestId;
         assert.equal(item.item.kind, "secret-request");
@@ -189,25 +225,19 @@ test(
           remaining > TTL_MS - 60000 && remaining <= TTL_MS,
           `handoff deadline ${String(status.handoffExpiresAt)}`,
         );
-        const released = JSON.parse(
-          (
-            await mcp.callTool({
-              name: "secret_release",
-              arguments: { requestId },
-            })
-          ).content[0].text,
-        );
-        assert.equal(released.status, "delivered");
-        await until(
-          () => exists(result.path),
-          (present) => present === false,
-        );
-        const after = await f.rpc("secret-request", "secret-request.status", {
-          agentId: agent.id,
+        assert.equal(await exists(result.path), true);
+        const repeated = await request("Test password", "Second run.");
+        assert.notEqual(
+          repeated.item.item.data.requestId,
           requestId,
-        });
-        assert.equal(after.status, "delivered");
-        assert.equal(after.handoffExpiresAt, null);
+          "a request after a delivery must create a new card instead of joining a settled one",
+        );
+        const repeatedAgain = await submit(
+          repeated.item.item.data.requestId,
+          SENTINEL,
+        );
+        assert.equal(repeatedAgain.status, "delivered");
+        assert.notEqual(repeatedAgain.path, result.path);
       },
     );
 
@@ -311,9 +341,6 @@ test(
         await expect(
           card.getByTestId("secret-request-delivered"),
         ).toContainText(/./);
-        await expect(card.getByTestId("secret-request-countdown")).toHaveText(
-          /^\d{1,2}:\d{2}$/,
-        );
         const answered = await pending;
         const delivered = JSON.parse(answered.content[0].text);
         assert.equal(delivered.status, "delivered");
@@ -343,8 +370,11 @@ test(
             value.item.data.status === "canceled",
         );
         await expect(
-          declineCard.getByTestId("secret-request-result"),
+          declineCard.getByTestId("secret-request-headline"),
         ).toContainText(/./);
+        await expect(
+          declineCard.getByTestId("secret-request-input"),
+        ).toHaveCount(0);
       },
     );
 
@@ -418,11 +448,7 @@ test(
     });
     await f.install("secret-request");
     const agent = await f.createAgent(f.temporary, "No tmpfs E2E");
-    const connection = await f.rpc(
-      "secret-request",
-      "secret-request.connection",
-      { agentId: agent.id },
-    );
+    const connection = await pluginConnection(f, agent.id);
     const mcp = new Client({
       name: "secret-request-namespace",
       version: "1.0.0",

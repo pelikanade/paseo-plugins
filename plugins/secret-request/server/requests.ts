@@ -44,9 +44,6 @@ function wire(record: SecretRequest) {
       ? {}
       : { description: record.description }),
     ...(record.hint === undefined ? {} : { hint: record.hint }),
-    ...(record.expectedLength === undefined
-      ? {}
-      : { expectedLength: record.expectedLength }),
   };
 }
 
@@ -59,7 +56,7 @@ export class Requests {
 
   constructor(private readonly scope: () => Promise<string>) {}
 
-  private root(): Promise<Handoff> {
+  prepare(): Promise<Handoff> {
     this.handoff ??= (async () => {
       const prepared = await prepareHandoff(this.uid, await this.scope());
       if (prepared.status === "unavailable")
@@ -72,9 +69,17 @@ export class Requests {
     return this.handoff;
   }
 
+  private labelKey(agentId: string, label: string): string {
+    return `${agentId}\u0000${label}`;
+  }
+
+  private releaseLabel(entry: Entry) {
+    this.labels.delete(this.labelKey(entry.agentId, entry.record.label));
+  }
+
   private forget(entry: Entry) {
     this.entries.delete(entry.record.requestId);
-    this.labels.delete(`${entry.agentId}\u0000${entry.record.label}`);
+    this.releaseLabel(entry);
     clearTimeout(entry.timer);
     entry.timer = undefined;
   }
@@ -119,18 +124,12 @@ export class Requests {
     }
   }
 
-  async initialize(): Promise<void> {
-    const handoff = await this.root();
-    if (handoff.status === "unavailable")
-      console.warn(`secret-request: ${handoff.message}`);
-  }
-
   async request(
     agentId: string,
     input: RequestInput,
     paseo: Api,
   ): Promise<HandoffResult> {
-    const handoff = await this.root();
+    const handoff = await this.prepare();
     if (handoff.status === "unavailable")
       return {
         status: "unavailable",
@@ -140,11 +139,11 @@ export class Requests {
         handoffExpiresAt: null,
         message: handoff.message,
       };
-    const key = `${agentId}\u0000${input.label}`;
+    const key = this.labelKey(agentId, input.label);
     const existingId = this.labels.get(key);
     if (existingId !== undefined) {
       const existing = this.entries.get(existingId);
-      if (existing)
+      if (existing && existing.record.status === "pending")
         return new Promise<HandoffResult>((resolve) => {
           existing.waiters.add(resolve);
         });
@@ -158,9 +157,6 @@ export class Requests {
         ? {}
         : { description: input.description }),
       ...(input.hint === undefined ? {} : { hint: input.hint }),
-      ...(input.expectedLength === undefined
-        ? {}
-        : { expectedLength: input.expectedLength }),
     };
     const entry: Entry = {
       record,
@@ -232,6 +228,7 @@ export class Requests {
       return result;
     }
     entry.record = { ...entry.record, status: "delivered" };
+    this.releaseLabel(entry);
     entry.expiresAt = Date.now() + HANDOFF_TTL_MS;
     entry.timer = setTimeout(() => {
       deleteValue(entry.root, requestId).catch((error: unknown) => {
@@ -264,7 +261,7 @@ export class Requests {
     if (entry.record.status === "canceled")
       return { status: "canceled", message: null };
     entry.record = { ...entry.record, status: "canceled" };
-    this.labels.delete(`${entry.agentId}\u0000${entry.record.label}`);
+    this.releaseLabel(entry);
     await this.publish(entry, paseo).catch((error: unknown) => {
       console.warn(
         "secret-request: cancellation update failed",
@@ -296,27 +293,6 @@ export class Requests {
           ? null
           : new Date(entry.expiresAt).toISOString(),
     };
-  }
-
-  find(agentId: string, requestId?: string, label?: string): string | null {
-    if (requestId !== undefined && this.entries.has(requestId))
-      return requestId;
-    if (label === undefined) return null;
-    const key = `${agentId}\u0000${label}`;
-    return this.labels.get(key) ?? null;
-  }
-
-  async release(agentId: string, requestId: string): Promise<ResolvedStatus> {
-    const entry = this.entries.get(requestId);
-    if (!entry || entry.agentId !== agentId) return "gone";
-    if (entry.record.status !== "delivered") return entry.record.status;
-    await deleteValue(entry.root, requestId).catch((error: unknown) => {
-      console.warn("secret-request: release failed", describe(error));
-    });
-    clearTimeout(entry.timer);
-    entry.timer = undefined;
-    entry.expiresAt = null;
-    return "delivered";
   }
 
   async abortAgent(agentId: string): Promise<void> {
