@@ -4,6 +4,45 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
+catalogs:
+  default:
+    '@getpaseo/cli':
+      specifier: 0.11.2
+      version: 0.11.2
+    '@getpaseo/client':
+      specifier: 0.11.2
+      version: 0.11.2
+    '@getpaseo/plugin':
+      specifier: 0.11.2
+      version: 0.11.2
+    '@getpaseo/protocol':
+      specifier: 0.11.2
+      version: 0.11.2
+    '@tanstack/react-query':
+      specifier: ^5.90.11
+      version: 5.104.0
+    '@types/node':
+      specifier: ^24.19.0
+      version: 24.19.0
+    '@types/react':
+      specifier: ~19.2.0
+      version: 19.2.18
+    prettier:
+      specifier: ^3.6.2
+      version: 3.9.9
+    react:
+      specifier: 19.1.0
+      version: 19.1.0
+    react-native:
+      specifier: 0.81.5
+      version: 0.81.5
+    typescript:
+      specifier: ^5.9.3
+      version: 5.9.3
+    zod:
+      specifier: ^4.4.3
+      version: 4.6.5
+
 importers:
 
   .:
@@ -12,10 +51,10 @@ importers:
         specifier: ^10.0.1
         version: 10.0.1(eslint@10.11.0(supports-color@8.1.1))
       '@getpaseo/cli':
-        specifier: 0.11.2
+        specifier: 'catalog:'
         version: 0.11.2(effect@4.0.0-rc.112)(react-native@0.81.5(@babel/core@7.29.7(supports-color@8.1.1))(@types/react@19.2.18)(react@19.1.9)(supports-color@8.1.1))(react@19.1.9)(supports-color@8.1.1)
       '@getpaseo/client':
-        specifier: 0.11.2
+        specifier: 'catalog:'
         version: 0.11.2
       '@playwright/test':
         specifier: 1.56.1
@@ -24,10 +63,10 @@ importers:
         specifier: ^10.11.0
         version: 10.11.0(supports-color@8.1.1)
       prettier:
-        specifier: ^3.6.2
+        specifier: 'catalog:'
         version: 3.9.9
       typescript:
-        specifier: ^5.9.3
+        specifier: 'catalog:'
         version: 5.9.3
       typescript-eslint:
         specifier: ^8.70.1
@@ -36,56 +75,56 @@ importers:
   plugins/devenv:
     dependencies:
       '@getpaseo/client':
-        specifier: 0.11.2
+        specifier: 'catalog:'
         version: 0.11.2
       '@getpaseo/protocol':
-        specifier: 0.11.2
+        specifier: 'catalog:'
         version: 0.11.2
       ws:
         specifier: ^8.22.0
         version: 8.22.0
     devDependencies:
       '@getpaseo/plugin':
-        specifier: 0.11.2
+        specifier: 'catalog:'
         version: 0.11.2(@getpaseo/client@0.11.2)(@getpaseo/protocol@0.11.2)(react-native@0.81.5(@babel/core@7.29.7(supports-color@8.1.1))(@types/react@19.2.18)(react@19.1.0)(supports-color@8.1.1))(react@19.1.0)(zod@4.6.5)
       '@tanstack/react-query':
-        specifier: ^5.90.11
+        specifier: 'catalog:'
         version: 5.104.0(react@19.1.0)
       '@types/node':
-        specifier: ^24.0.0
+        specifier: 'catalog:'
         version: 24.19.0
       '@types/react':
-        specifier: ~19.2.0
+        specifier: 'catalog:'
         version: 19.2.18
       '@types/ws':
         specifier: ^8.18.2
         version: 8.18.2
       prettier:
-        specifier: ^3.6.2
+        specifier: 'catalog:'
         version: 3.9.9
       react:
-        specifier: 19.1.0
+        specifier: 'catalog:'
         version: 19.1.0
       react-native:
-        specifier: 0.81.5
+        specifier: 'catalog:'
         version: 0.81.5(@babel/core@7.29.7(supports-color@8.1.1))(@types/react@19.2.18)(react@19.1.0)(supports-color@8.1.1)
       typescript:
-        specifier: ^5.9.3
+        specifier: 'catalog:'
         version: 5.9.3
       zod:
-        specifier: ^4.4.3
+        specifier: 'catalog:'
         version: 4.6.5
 
   plugins/filler-noise:
     devDependencies:
       '@getpaseo/plugin':
-        specifier: 0.11.2
+        specifier: 'catalog:'
         version: 0.11.2(@getpaseo/client@0.11.2)(@getpaseo/protocol@0.11.2)(react-native@0.81.5(@babel/core@7.29.7(supports-color@8.1.1))(@types/react@19.2.18)(react@19.1.9)(supports-color@8.1.1))(react@19.1.9)(zod@4.6.5)
       '@types/react':
-        specifier: ~19.2.0
+        specifier: 'catalog:'
         version: 19.2.18
       typescript:
-        specifier: ^5.9.3
+        specifier: 'catalog:'
         version: 5.9.3
 
   plugins/generative-ui:
@@ -101,52 +140,52 @@ importers:
         version: 1.31.0(supports-color@8.1.1)(zod@4.6.5)
     devDependencies:
       '@getpaseo/plugin':
-        specifier: 0.11.2
+        specifier: 'catalog:'
         version: 0.11.2(@getpaseo/client@0.11.2)(@getpaseo/protocol@0.11.2)(react-native@0.81.5(@babel/core@7.29.7(supports-color@8.1.1))(@types/react@19.2.18)(react@19.1.0)(supports-color@8.1.1))(react@19.1.0)(zod@4.6.5)
       '@tanstack/react-query':
-        specifier: ^5.90.11
+        specifier: 'catalog:'
         version: 5.104.0(react@19.1.0)
       '@types/node':
-        specifier: ^24.19.0
+        specifier: 'catalog:'
         version: 24.19.0
       '@types/react':
-        specifier: ~19.2.0
+        specifier: 'catalog:'
         version: 19.2.18
       react:
-        specifier: 19.1.0
+        specifier: 'catalog:'
         version: 19.1.0
       react-native:
-        specifier: 0.81.5
+        specifier: 'catalog:'
         version: 0.81.5(@babel/core@7.29.7(supports-color@8.1.1))(@types/react@19.2.18)(react@19.1.0)(supports-color@8.1.1)
       typescript:
-        specifier: ^5.9.3
+        specifier: 'catalog:'
         version: 5.9.3
       zod:
-        specifier: ^4.4.3
+        specifier: 'catalog:'
         version: 4.6.5
 
   plugins/hello-paseo:
     devDependencies:
       '@getpaseo/plugin':
-        specifier: 0.11.2
+        specifier: 'catalog:'
         version: 0.11.2(@getpaseo/client@0.11.2)(@getpaseo/protocol@0.11.2)(react-native@0.81.5(@babel/core@7.29.7(supports-color@8.1.1))(@types/react@19.2.18)(react@19.1.0)(supports-color@8.1.1))(react@19.1.0)(zod@4.6.5)
       '@tanstack/react-query':
-        specifier: ^5.90.11
+        specifier: 'catalog:'
         version: 5.104.0(react@19.1.0)
       '@types/react':
-        specifier: ~19.2.0
+        specifier: 'catalog:'
         version: 19.2.18
       react:
-        specifier: 19.1.0
+        specifier: 'catalog:'
         version: 19.1.0
       react-native:
-        specifier: 0.81.5
+        specifier: 'catalog:'
         version: 0.81.5(@babel/core@7.29.7(supports-color@8.1.1))(@types/react@19.2.18)(react@19.1.0)(supports-color@8.1.1)
       typescript:
-        specifier: ^5.9.3
+        specifier: 'catalog:'
         version: 5.9.3
       zod:
-        specifier: ^4.4.3
+        specifier: 'catalog:'
         version: 4.6.5
 
 packages:
