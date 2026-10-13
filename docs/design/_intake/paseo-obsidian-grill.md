@@ -6,14 +6,14 @@ Repo: `pelikanade/paseo-plugins`, branch `plan/paseo-obsidian-plugin`
 Date: 2026-10-13
 Griller: omp/magpie/deepseek/deepseek-flash, one round of numbered frontier questions per turn
 Method: grill-with-docs (mattpocock/skills), with `domain-modeling` for `GLOSSARY.md` and ADRs
-Status: ready-for-design — rounds 1–4 settled, design written, slices and budget awaiting confirmation
+Status: ready-for-design — rounds 1–4 settled, SDK re-grounded on 0.11.2 in round 5, skill-delivery route still open with the user; slices and budget awaiting confirmation
 
 ## Context
 
 - The user wants an Obsidian vault available to Paseo agents on the daemon host: headless Obsidian Sync login, pull and update, read-only by default with a read-write switch, chat references into the vault, a global skill / system prompt appended from files inside the vault, and MCP tools for retrieval and (later) writes.
-- Installed SDK is `@getpaseo/plugin` 0.10.2. Verified 0.10.2 client surface: `addSurface`, `addSidebarItem`, `addWorkspacePanel`, `addCommandCenterItem`, `addSlashCommand`, `addHeaderButton`, `addComposerPill`, `addAttachmentSource`, `addSettingsScreen`, `addTimelineRenderer`, `addTimelineTransformer`, `addTheme`, `openPanel`, `openSurface`, `openSettings`. Server surface: `handle` (Zod RPC), `registerSettings`, `registerProvider`, `on(...)` lifecycle events, `before(...)` request hooks.
-- Chat has no `$`-mention feature and no mention extension point at 0.10.2 or later; the host's own composer autocomplete is `@` for workspace files and is not extensible. The only picker a plugin can contribute is an attachment source.
-- Plugin MCP tools are contributed by mutating `request.config.mcpServers` inside `server.before("agent.create", ...)`; tool preapproval is `config.toolPolicy.preapproved`. Paseo 0.10.2 has no plugin skill registry: a bundled skill is delivered as text concatenated into `config.systemPrompt` (the `devenv` pattern).
+- Installed SDK is now `@getpaseo/plugin` **0.11.2**, matching the daemon on the development machine. The workspace pinned 0.10.2 while rounds 1–4 ran and was upgraded on 2026-10-13 at the user's instruction, together with `@getpaseo/cli` and `@getpaseo/client`. Verified 0.11.2 client surface: `addScreen`, `addSidebarHeaderItem`, `addSidebarFooterItem`, `openScreen`, `openPopover`, plus the deprecated `addSurface`, `addSidebarItem`, and `openSurface`; `addWorkspacePanel`, `addCommandCenterItem`, `addSlashCommand`, `addHeaderButton`, `addComposerPill`, `addAttachmentSource`, `addSettingsScreen`, `addTimelineRenderer`, `addTimelineTransformer`, `addTheme`, `openPanel`, `openSettings`. Server surface: `handle` (Zod RPC), `registerSettings`, `registerProvider`, `spawnProcess`/`execCommand`/`terminateProcess`, `on(...)` lifecycle events (now including `agent.closed`), `before(...)` request hooks.
+- Chat has no `$`-mention feature and no mention extension point at 0.11.2; the host's own composer autocomplete is `@` for workspace files and is not extensible. The only picker a plugin can contribute is an attachment source, and the host calls its `search` RPC with `{ query }` only.
+- Plugin MCP tools are contributed by mutating `request.config.mcpServers` inside `server.before("agent.create", ...)`; tool preapproval is `config.toolPolicy.preapproved`. Paseo 0.11.2 has no plugin skill registry and the SDK exports nothing skill-related; Paseo's own skills come from directories each provider scans (`$CODEX_HOME/skills` and `<cwd>/.codex/skills` for Codex, `~/.agents/skills` and `<cwd>/.agents/skills` for the omp and Claude families), where only `SKILL.md` front matter reaches the prompt.
 - There is no secrets API. Settings are host-scoped JSON documents, explicitly "not a credential vault".
 - Existing plugins persist data under `$PASEO_HOME/plugin-data/<id>/` using Node APIs.
 - Tests are real isolated-daemon E2E only; no unit tests, no mocked host, provider, or transport.
@@ -165,6 +165,18 @@ Facts confirmed before this round, from the official client: `obsidian-headless@
 **Q9 错误体验:** how do tools answer when setup or sync is broken?
 **A9:** Structured errors — `ob` missing, token invalid, remote unreachable, vault missing — each with a repair action in the panel. Never a silent empty result.
 
+### Round 5 — SDK version and skill delivery
+
+Two facts were established before this round. Paseo's native skill mechanism is filesystem scanning by each provider: `listCodexSkills` reads `<cwd>/.codex/skills`, the parent directory, the repository root, and `$CODEX_HOME/skills`, parses `SKILL.md` front matter, and registers `name`/`description` with `kind: "skill"` (`@getpaseo/server` 0.11.2 `dist/server/server/agent/providers/codex-app-server-agent.js`); the omp provider maps a skill source through its own CLI (`providers/omp/commands.js`); this machine's `~/.agents/skills` and the project's `.agents/skills` symlinks are what fill the current agent's skill list. There is no plugin API that registers a skill at 0.10.2 or 0.11.2, and an MCP resource claiming a `skill://` URI does not resolve in this runtime (`skill://generative-ui/SKILL.md` was refused while `skill://paseo-plugin-dev/SKILL.md` worked).
+
+**Q1 skill 交付:** how should vault skills reach agents — a prompt index plus tool reads, mirroring the files into a provider-scanned skill directory, or inlining full text?
+**A1:** Not answered. The user replied "你看一下当前paseo版本呢，现在好像不是0.10.2了" — verify the running Paseo version first, because the earlier grounding may be stale. Verification confirmed the daemon is **0.11.2** while the workspace pinned 0.10.2, and the 0.11.2 SDK still exposes no skill API, so the question is re-asked with that context.
+
+**Q2 缺 frontmatter:** what happens to a vault skill file with no `name`/`description`?
+**A2:** "直接跳过" — skip it. No name/description fallback and no full-text injection.
+
+Follow-up instruction in the same turn: "SDK版本也升级吧". The workspace upgrade was executed on this branch — `@getpaseo/cli`, `@getpaseo/client`, `@getpaseo/plugin`, and `@getpaseo/protocol` moved from 0.10.2 to 0.11.2, the E2E `appVersion` moved with them, `plugins/hello-paseo` migrated from `addSurface`/`addSidebarItem` to `addScreen`/`addSidebarHeaderItem` (the deprecated aliases fail `pnpm lint`), and the version-bearing documentation was swept. An independent worktree (`chore/pnpm-catalog`, separate agent) hoists the SDK versions into a pnpm catalog and re-verifies every plugin.
+
 ## Settled decisions
 
 - **D1** One vault per daemon, global to every agent; the plugin manages its directory under `$PASEO_HOME/plugin-data/obsidian/`, overridable to an existing path.
@@ -184,6 +196,9 @@ Facts confirmed before this round, from the official client: `obsidian-headless@
 - **D15** Data older than 15 minutes without a successful sync is marked stale; tools never block, and unconfigured or broken setup returns structured errors with a repair action in the panel.
 - **D16** Read tools exclude `.obsidian/` and `Trash/`; attachments return path, size, and modification time instead of binary content.
 - **D17** The remote vault is chosen from `ob sync-list-remote --json` results listed in the panel.
+- **D18** A vault skill file without `name`/`description` front matter is skipped, with the reason reported; nothing is injected as a fallback.
+- **D19** The workspace targets Paseo **0.11.2**: CLI, client, plugin SDK, and protocol are pinned to 0.11.2, the new plugin requires `>=0.11.0`, and `hello-paseo` moved to `>=0.11.0` when it adopted `addScreen`/`addSidebarHeaderItem`. `devenv`, `generative-ui`, and `filler-noise` keep `>=0.10.2` because their code uses no 0.11-only API.
+- **D20 (open)** Vault skill files ship as prompt text in v0. Whether they are additionally mirrored into a provider-scanned skill directory so agents receive them as native `SKILL.md` entries is still open.
 
 ## Open items
 
