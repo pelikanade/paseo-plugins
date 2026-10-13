@@ -14,6 +14,10 @@
     inputs.bend.packages.${pkgs.stdenv.hostPlatform.system}.default
   ];
 
+  env.FONTCONFIG_FILE = toString (
+    pkgs.makeFontsConf { fontDirectories = [ pkgs.dejavu_fonts ]; }
+  );
+
   enterTest = ''
     node -e 'if (process.versions.node.split(".")[0] !== "24") process.exit(1)'
     pnpm install --frozen-lockfile

@@ -78,20 +78,20 @@ export default function contribute(server: PluginServerContext) {
   server.handle(statusRpc, async ({ agentId }, { paseo }) => {
     await ready;
     const agent = await paseo.agents.ref(agentId).refresh();
-    if (!agent) throw new Error("Unknown agent");
+    if (!agent) throw new Error(`Unknown agent: ${agentId}`);
     return reloads.view(agentId, agent.agent.cwd);
   });
   server.handle(allowRpc, async ({ agentId }, { paseo }) => {
     await ready;
     const agent = await paseo.agents.ref(agentId).refresh();
-    if (!agent) throw new Error("Unknown agent");
+    if (!agent) throw new Error(`Unknown agent: ${agentId}`);
     await reloads.allow(agentId, agent.agent.cwd, paseo);
     return reloads.view(agentId, agent.agent.cwd);
   });
   server.handle(loadRpc, async ({ agentId }, { paseo }) => {
     await ready;
     const agent = await paseo.agents.ref(agentId).refresh();
-    if (!agent) throw new Error("Unknown agent");
+    if (!agent) throw new Error(`Unknown agent: ${agentId}`);
     environments.load(agent.agent.cwd, true).catch(console.error);
     return reloads.view(agentId, agent.agent.cwd);
   });
