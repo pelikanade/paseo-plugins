@@ -29,9 +29,12 @@ skills/
 .agents/skills/paseo-plugin-dev # Skill discovery link
 devenv.nix                     # Node 24 + pnpm + Bend 2.0.32
 pnpm-workspace.yaml            # Independent plugin packages
+favicon.svg                    # Project icon Paseo detects for this repository
 ```
 
 Each plugin keeps its own manifest, TypeScript configuration, dependencies, and `client/`, `server/`, and `shared/` directories. Keep distributable plugin code inside its package so installation from a subdirectory works independently of this workspace.
+
+The root `favicon.svg` is the icon Paseo shows for this project. Paseo scans `public/`, `static/`, `assets/`, `images/`, and `img/` first, then the project root, for names such as `favicon.svg`, `favicon.png`, `icon.*`, `logo.*`, and `favicon.ico`; the first square file under 32 KB wins, so a future `public/` directory would take precedence. Setting a custom icon in the app overrides detection and is stored by Paseo, not in the repository.
 
 ## Paseo worktree lifecycle
 
