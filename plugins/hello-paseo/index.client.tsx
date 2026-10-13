@@ -1,13 +1,17 @@
 import type { PluginClientContext } from "@getpaseo/plugin/client";
-import { GreetingSurface } from "./client/greeting";
+import { GreetingScreen } from "./client/greeting";
+import { GreetingSidebarItem } from "./client/sidebar";
 
 export default function contribute(client: PluginClientContext) {
-  client.addSurface("greeting", GreetingSurface);
-  client.addSidebarItem({
+  client.addScreen({
     id: "greeting",
     title: "Greeting",
-    icon: "MessageCircle",
-    surface: "greeting",
+    Component: GreetingScreen,
+  });
+  client.addSidebarHeaderItem({
+    id: "greeting",
+    title: "Greeting",
+    Component: GreetingSidebarItem,
   });
   return () => {};
 }

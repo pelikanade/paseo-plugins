@@ -11,7 +11,7 @@
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
-    "@getpaseo/plugin": "0.10.2",
+    "@getpaseo/plugin": "0.11.2",
     "@types/react": "~19.2.0",
     "typescript": "^5.9.3"
   }

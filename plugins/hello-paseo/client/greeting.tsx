@@ -1,4 +1,4 @@
-import type { PluginSurfaceProps } from "@getpaseo/plugin/client";
+import type { PluginScreenProps } from "@getpaseo/plugin/client";
 import { useRpc } from "@getpaseo/plugin/client";
 import { useMutation } from "@tanstack/react-query";
 import { useMemo } from "react";
@@ -6,7 +6,7 @@ import { Pressable, Text, View } from "react-native";
 import { greetingRpc } from "../shared/greeting";
 import { openExternal } from "./web";
 
-export function GreetingSurface({ theme, layout }: PluginSurfaceProps) {
+export function GreetingScreen({ theme, layout }: PluginScreenProps) {
   const createGreeting = useRpc(greetingRpc);
   const greeting = useMutation({ mutationFn: createGreeting });
   const styles = useMemo(
