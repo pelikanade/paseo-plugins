@@ -59,7 +59,7 @@ pnpm check
 
 IDs start with a lowercase letter and use lowercase letters, digits, or hyphens. The generator refuses a nonempty destination. New packages are private until you prepare a release.
 
-The CLI and plugin SDK start at **0.10.2**. The published scaffold uses `addSurface` and `addSidebarItem`; the live docs currently show newer registration APIs. Use the installed SDK declarations for this pinned release. Upgrade CLI, SDK, and manifest compatibility together.
+The CLI, client, and plugin SDK are pinned to **0.11.2**, the release this workspace targets. The scaffold and `plugins/hello-paseo` register UI with `addScreen` and `addSidebarHeaderItem`; `addSurface`, `addSidebarItem`, and `openSurface` are deprecated aliases that `pnpm lint` rejects. Use the installed SDK declarations for this pinned release. Upgrade CLI, SDK, and manifest compatibility together.
 
 ## Try the starter in Paseo
 
