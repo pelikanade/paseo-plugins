@@ -6,7 +6,7 @@ Repo: `pelikanade/paseo-plugins`, branch `plan/paseo-obsidian-plugin`
 Date: 2026-10-13
 Griller: omp/magpie/deepseek/deepseek-flash, one round of numbered frontier questions per turn
 Method: grill-with-docs (mattpocock/skills), with `domain-modeling` for `GLOSSARY.md` and ADRs
-Status: ready-for-design — rounds 1–4 settled, SDK re-grounded on 0.11.2 in round 5, skill-delivery route still open with the user; slices and budget awaiting confirmation
+Status: ready-for-design — rounds 1–6 settled; slice order and budget awaiting confirmation
 
 ## Context
 
@@ -177,6 +177,13 @@ Two facts were established before this round. Paseo's native skill mechanism is 
 
 Follow-up instruction in the same turn: "SDK版本也升级吧". The workspace upgrade was executed on this branch — `@getpaseo/cli`, `@getpaseo/client`, `@getpaseo/plugin`, and `@getpaseo/protocol` moved from 0.10.2 to 0.11.2, the E2E `appVersion` moved with them, `plugins/hello-paseo` migrated from `addSurface`/`addSidebarItem` to `addScreen`/`addSidebarHeaderItem` (the deprecated aliases fail `pnpm lint`), and the version-bearing documentation was swept. An independent worktree (`chore/pnpm-catalog`, separate agent) hoists the SDK versions into a pnpm catalog and re-verifies every plugin.
 
+### Round 6 — skill delivery route
+
+Re-asked with the 0.11.2 facts: the SDK still exposes no skill API, native skills come from provider-scanned directories, and an MCP resource with a `skill://` URI does not resolve in this runtime.
+
+**Q1 skill 交付:** prompt index plus tool reads, mirroring the files into a provider-scanned skill directory, inlining full text, or a split where v0 indexes and mirroring comes later?
+**A1:** Prompt index plus tool reads. `.paseo/system.md` is appended in full under a 32 KB cap; each `.paseo/skills/*.md` contributes only its front-matter `name`, `description`, and vault-relative path, and the body is read on demand with `read_vault`. A skill file without front matter is skipped, per round 5. Mirroring into `~/.agents/skills` or a Codex skills directory is a deliberate non-goal for v0 because it writes outside plugin data, needs ownership bookkeeping, and only takes effect for new sessions.
+
 ## Settled decisions
 
 - **D1** One vault per daemon, global to every agent; the plugin manages its directory under `$PASEO_HOME/plugin-data/obsidian/`, overridable to an existing path.
@@ -198,12 +205,12 @@ Follow-up instruction in the same turn: "SDK版本也升级吧". The workspace u
 - **D17** The remote vault is chosen from `ob sync-list-remote --json` results listed in the panel.
 - **D18** A vault skill file without `name`/`description` front matter is skipped, with the reason reported; nothing is injected as a fallback.
 - **D19** The workspace targets Paseo **0.11.2**: CLI, client, plugin SDK, and protocol are pinned to 0.11.2, the new plugin requires `>=0.11.0`, and `hello-paseo` moved to `>=0.11.0` when it adopted `addScreen`/`addSidebarHeaderItem`. `devenv`, `generative-ui`, and `filler-noise` keep `>=0.10.2` because their code uses no 0.11-only API.
-- **D20 (open)** Vault skill files ship as prompt text in v0. Whether they are additionally mirrored into a provider-scanned skill directory so agents receive them as native `SKILL.md` entries is still open.
+- **D20** Vault skills ship as a prompt index: `.paseo/system.md` in full under a 32 KB cap, and one front-matter index line per `.paseo/skills/*.md` with the body read on demand through `read_vault`. Mirroring them into a provider-scanned skill directory is a non-goal for v0 — it would write outside plugin data, need ownership bookkeeping, and only take effect for new agent sessions.
 
 ## Open items
 
 - **O1–O4 resolved** in round 4: the default suite needs no account (D14), the pasted token is a supported client input (D7/D13), continuous mode exists and reconnects on its own (D9), and plugin state lives under `$PASEO_HOME/plugin-data/obsidian/`.
-- Remaining detail for slice S2: which line of the watcher's progress output marks a completed pull (the source of `lastSyncedAt`, since `sync-status --json` carries no timestamp), and whether a rejected token is distinguishable from an unreachable remote in stderr. `sync-status --json` field names and the exit codes are known: 3 no sync configuration, 2 missing E2EE key, 1 otherwise.
+- Remaining detail for slice S2: which line of the watcher's progress output marks a completed pull (the source of `lastSuccessAt`, since `sync-status --json` carries no timestamp), and whether a rejected token is distinguishable from an unreachable remote in stderr. `sync-status --json` field names and the exit codes are known: 3 no sync configuration, 2 missing E2EE key, 1 otherwise.
 
 ## Deferred / open
 
