@@ -193,9 +193,10 @@ export async function runtime(t, options = {}) {
   });
   let url;
   const start = async () => {
+    const prefix = options.daemonCommand ?? [];
     child = spawn(
-      process.execPath,
-      [cliEntry, "daemon", "run", "--home", home],
+      prefix[0] ?? process.execPath,
+      [...prefix.slice(1), cliEntry, "daemon", "run", "--home", home],
       {
         env: daemonEnv,
         detached: true,
@@ -300,6 +301,7 @@ export async function runtime(t, options = {}) {
     get url() {
       return url;
     },
+    daemonLog: () => output,
     get client() {
       return client;
     },
