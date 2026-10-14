@@ -21,6 +21,7 @@ plugins/
   hello-paseo/                  # Official starter: client surface + daemon RPC
   devenv/                       # Trust-gated environments + Bend2 policy
   generative-ui/                # Native Chat cards + scoped MCP + agent skill
+  obsidian/                     # Read-only Obsidian vault: pull-only Sync + vault MCP tools
 scripts/
   create-plugin.mjs             # Wraps the pinned Paseo scaffold
 skills/
@@ -103,6 +104,7 @@ Failure diagnostics are saved under ignored `test-results/`, including daemon lo
 | `pnpm lint`                   | Run strict, type-aware ESLint checks                            |
 | `pnpm lint:fix`               | Apply ESLint's automatic fixes                                  |
 | `pnpm test` / `pnpm test:e2e` | Run real plugin E2E scenarios                                   |
+| `pnpm test:obsidian`          | Run the credential-gated real Obsidian Sync suite               |
 | `pnpm verify`                 | Check Bend2 proofs and committed model artifacts                |
 | `pnpm format`                 | Format source, configuration, and Markdown                      |
 | `pnpm check`                  | Run typechecking, linting, proofs, tests, and formatting checks |
@@ -117,11 +119,19 @@ The [generative-ui plugin](plugins/generative-ui/README.md) adds native json-ren
 
 The [filler-noise plugin](plugins/filler-noise/README.md) hides assistant rows whose text is only dots, ellipses, or whitespace, such as the `.` DeepSeek models emit on tool-call turns.
 
+The [obsidian plugin](plugins/obsidian/README.md) keeps one Obsidian vault in pull-only sync through the official headless CLI and gives every agent four read-only vault tools, a prompt block from `.paseo/system.md` and `.paseo/skills/*.md`, and an attachment picker. Its default E2E suite provisions `obsidian-headless` when `ob` is not on `PATH`; the real Sync suite needs an account and is kept out of `pnpm test:e2e`:
+
+```sh
+OBSIDIAN_AUTH_TOKEN=... OBSIDIAN_E2E_VAULT="<throwaway vault id or name>" pnpm test:obsidian
+```
+
+Without those variables that suite fails with a prerequisite error instead of skipping.
+
 The [ESLint configuration](eslint.config.mjs) follows [AsterisMono/obsidian-agent](https://github.com/AsterisMono/obsidian-agent/blob/main/eslint.config.mjs), with generated environment directories ignored. It enables strict type-aware checks, exhaustive switches, rejects unsafe assertions and unhandled promises (including `void`), and forbids source comments.
 
 Use `$paseo-plugin-dev` in an agent that discovers `.agents/skills`, or load [SKILL.md](skills/paseo-plugin-dev/SKILL.md) directly. Its [workflow reference](skills/paseo-plugin-dev/references/development.md) covers local reloads and release preparation.
 
-For distribution, start with the [Paseo publishing guide](https://paseo.sh/docs/plugins/publishing). The devenv, generative-ui, and filler-noise packages release on npm as `@pelikanade/paseo-plugin-<id>` at 0.1.0 under MIT; hello-paseo stays private as the starter. Publish one with:
+For distribution, start with the [Paseo publishing guide](https://paseo.sh/docs/plugins/publishing). The devenv, generative-ui, and filler-noise packages release on npm as `@pelikanade/paseo-plugin-<id>` at 0.1.0 under MIT; hello-paseo stays private as the starter, and obsidian stays private while the read-write slice is deferred. Publish one with:
 
 ```sh
 pnpm --filter @pelikanade/paseo-plugin-devenv exec npm publish --access public

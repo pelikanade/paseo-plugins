@@ -1,6 +1,7 @@
 # Paseo Obsidian vault plugin: UI design
 
 Status: design only. Nothing here ships. Plugin id `paseo-obsidian`.
+Superseded in part: on 2026-10-14 the shipped presentation layer was redesigned in a tasteskill v2 pass (see the amendments in [paseo-obsidian.md](paseo-obsidian.md)). The visual direction below — its uppercase section labels, pills, outlined rules and type sizes — records the pre-redesign build; the state matrix, error table, screen inventory and copy intent remain authoritative. Injection changed as well: skills are read from a visible `Skills/` folder at the vault root and no system-prompt file is read or shown, so the `.paseo/system.md` rows and the injection mapping below record the earlier build.
 Scope: v0 is read-only. Sync runs pull-only. The vault server exposes `list_vault`, `glob_vault`, `grep_vault`, `read_vault`. The client never uploads. There is no read-write switch, no write tools, and no mode toggle in v0. Read-write is covered only in the last section, marked deferred.
 
 ## Grounding
