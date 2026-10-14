@@ -1,6 +1,6 @@
 # Workspace harness
 
-The checkout pins Paseo CLI, SDK and client to 0.10.2. Its npm server package includes a compiled Web UI, so browser tests need no separate app checkout or bundler. Start `paseo daemon run --home <temporary-home>` with a temporary config containing `daemon.listen: "127.0.0.1:0"`, relay disabled, `features.webUi.enabled: true` and `pluginsEnabled: true`. Read the assigned listener through the pinned server's public `daemon-control` export.
+The checkout pins Paseo CLI, SDK and client to 0.11.2. Its npm server package includes a compiled Web UI, so browser tests need no separate app checkout or bundler. Start `paseo daemon run --home <temporary-home>` with a temporary config containing `daemon.listen: "127.0.0.1:0"`, relay disabled, `features.webUi.enabled: true` and `pluginsEnabled: true`. Read the assigned listener through the pinned server's public `daemon-control` export.
 
 Use the `e2e/` fixture and `*.e2e.mjs` files. `pnpm test` delegates to `pnpm test:e2e`; `pnpm check` includes the complete E2E suite. The workspace's declarative `pkgs.chromium` is discovered on `PATH`; an explicit `PASEO_E2E_BROWSER` can select another compatible system executable. Otherwise install Chromium with `pnpm exec playwright install chromium`. A custom `PLAYWRIGHT_BROWSERS_PATH` can select a browser cache without making the suite optional. Project `PASEO_*` variables are deliberately filtered by the devenv plugin, so do not use them to declare a browser path in `devenv.nix`.
 

@@ -21,7 +21,7 @@ Use the [official quickstart](https://paseo.sh/docs/plugins) as the starting poi
 
 Read the target plugin's manifest, package, entries, and installed SDK declarations before choosing APIs. Keep the CLI and SDK versions aligned when upgrading; update the manifest's supported Paseo range for newly required APIs.
 
-This repository starts with Paseo 0.10.2. Its generated client entry uses `addSurface` and `addSidebarItem`. The live documentation currently shows `addScreen` and `addSidebarHeaderItem`. Use the installed SDK as the authority for this checkout, and check the current documentation when upgrading. Do not mix examples from different releases.
+This repository starts with Paseo 0.11.2. Its generated client entry uses `addScreen` for the screen and `addSidebarHeaderItem` for the sidebar entry that opens it, rendering that entry with the `SidebarRow` UI component. The 0.10-era `addSurface` and `addSidebarItem` remain in the SDK only as deprecated aliases; do not use them in new code. Use the installed SDK as the authority for this checkout, and check the current documentation when upgrading. Do not mix examples from different releases.
 
 ## Runtime boundaries
 

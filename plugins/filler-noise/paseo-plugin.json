@@ -1,6 +1,6 @@
 {
   "id": "filler-noise",
   "requirements": {
-    "paseo": ">=0.10.2"
+    "paseo": ">=0.11.2"
   }
 }

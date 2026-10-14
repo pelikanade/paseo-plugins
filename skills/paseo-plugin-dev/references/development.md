@@ -1,6 +1,6 @@
 # Development and release workflow
 
-Sources: [quickstart](https://paseo.sh/docs/plugins), [reference](https://paseo.sh/docs/plugins/reference), and [publishing](https://paseo.sh/docs/plugins/publishing). Reviewed on 2026-10-02. Fetch current guidance when changing Paseo versions or release behavior.
+Sources: [quickstart](https://paseo.sh/docs/plugins), [reference](https://paseo.sh/docs/plugins/reference), and [publishing](https://paseo.sh/docs/plugins/publishing). Reviewed on 2026-10-12. Fetch current guidance when changing Paseo versions or release behavior.
 
 ## Local daemon workflow
 
@@ -16,7 +16,7 @@ pnpm exec paseo plugin logs <id> --json
 
 Install only when the task authorizes running the plugin on the target daemon. Plugin code is unsandboxed. Check the daemon's current `pluginsEnabled` value and obtain explicit user authorization before changing it to true, as required by the quickstart. Repository setup alone does not authorize enabling plugins.
 
-Edits require a reload. Typechecking does not exercise the daemon compiler's runtime-boundary checks or native rendering. When a daemon is available and installation is authorized, verify the status is `running`, exercise the affected surface or RPC, and check errors. If a surface is missing, inspect the selected host, plugin state, and backend logs. Check phone layouts for UI changes.
+Edits require a reload. Typechecking does not exercise the daemon compiler's runtime-boundary checks or native rendering. When a daemon is available and installation is authorized, verify the status is `running`, exercise the affected screen, panel or RPC, and check errors. If a contribution is missing, inspect the selected host, plugin state, and backend logs. Check phone layouts for UI changes.
 
 ## Packaging
 

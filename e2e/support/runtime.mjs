@@ -223,7 +223,7 @@ export async function runtime(t, options = {}) {
         ? `ws+unix://${instance.listen.replace(/^unix:\/\//, "")}:/ws`
         : `${url.replace("http", "ws")}/ws`,
       clientId: randomUUID(),
-      appVersion: "0.10.2",
+      appVersion: "0.11.2",
       webSocketFactory: (address, configuration) =>
         new WebSocket(address, configuration?.protocols, {
           headers: configuration?.headers,

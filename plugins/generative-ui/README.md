@@ -1,6 +1,6 @@
 # Generative UI
 
-A Paseo plugin for native interactive cards in Chat. Uses json-render core and React Native 0.21.0 with Paseo 0.10.2. The plugin owns its component catalog, validates each component and action, and ships an Agent-facing skill.
+A Paseo plugin for native interactive cards in Chat. Uses json-render core and React Native 0.21.0 with Paseo 0.11.2. The plugin owns its component catalog, validates each component and action, and ships an Agent-facing skill.
 
 ## Use
 
