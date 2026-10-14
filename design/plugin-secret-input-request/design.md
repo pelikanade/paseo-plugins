@@ -27,7 +27,7 @@ So a blocking request must deliver something the running turn can consume immedi
 4. On submit the value is written once to the handoff file and the blocked call returns `{status:"delivered", requestId, label, path, handoffExpiresAt}`.
 5. Cancel resolves the call with `{status:"canceled"}` so the agent learns the user declined instead of waiting.
 
-Deletion triggers, file permissions, refusal behaviour and the exact path are in the README; the channel decision is ADR 0001, the no-vault decision ADR 0002, the newline decision ADR 0003.
+Deletion triggers, file permissions, refusal behaviour and the exact path are in the README; the channel decision is ADR 0004, the no-vault decision ADR 0005, the newline decision ADR 0006.
 
 ## Verified constraints in 0.11.2 (daemon read, call chains cited)
 
@@ -55,7 +55,7 @@ What differs, deliberately: the value never travels the answer path; a blocked s
 - The value sits in a RAM-backed tmpfs file for up to 15 minutes, readable by the daemon user and root, and in JavaScript strings that cannot be zeroed. On a host with unencrypted swap, tmpfs pages can be written to swap, so the value can reach disk after all.
 - No `/dev/shm`, or a non-tmpfs one, means the feature is unavailable by design: the agent gets a clear error instead of a card.
 - No MCP tool can delete the file early, but the agent has a shell: it can read, copy or print the file, so the TTL bounds the exposure window only for an agent that follows its instructions.
-- Multi-line secrets are not special-cased (ADR 0003): the web field cannot hold newlines, so a pasted PEM arrives single-line and the agent must repair or re-request it.
+- Multi-line secrets are not special-cased (ADR 0006): the web field cannot hold newlines, so a pasted PEM arrives single-line and the agent must repair or re-request it.
 - The agent itself can leak the value; the plugin cannot stop that. The injected instruction forbids echoing it and reporting its length, prefix, suffix or hash.
 - The value crosses the client ↔ daemon transport; a phone or remote client should be on the relay's E2EE path, which the plugin can neither detect nor enforce.
 - Agents created before the plugin was installed do not receive the MCP server automatically.
