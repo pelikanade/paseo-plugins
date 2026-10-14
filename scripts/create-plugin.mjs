@@ -49,25 +49,6 @@ const webPath = path.join(directory, "client", "web.ts");
 const web = await readFile(webPath, "utf8");
 await writeFile(webPath, web.replace(/^\/\/[^\n]*\n/gm, ""));
 
-const entryPath = path.join(directory, "index.client.tsx");
-const entry = await readFile(entryPath, "utf8");
-await writeFile(
-  entryPath,
-  entry
-    .replace(
-      "function GreetingItem({ currentScreen, openScreen }: PluginSidebarItemProps) {",
-      "function GreetingItem(props: PluginSidebarItemProps) {",
-    )
-    .replace(
-      'active={currentScreen?.screenId === "greeting"}',
-      'active={props.currentScreen?.screenId === "greeting"}',
-    )
-    .replace(
-      'onPress={() => openScreen({ screenId: "greeting" })}',
-      'onPress={() => { props.openScreen({ screenId: "greeting" }); }}',
-    ),
-);
-
 const formatting = spawnSync("prettier", ["--write", directory], {
   cwd: root,
   stdio: "inherit",
