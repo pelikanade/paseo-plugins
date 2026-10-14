@@ -44,7 +44,7 @@ import { vaultExists, vaultPath } from "./vault";
 import { Watcher } from "./watcher";
 import type { SyncFailure } from "./watcher";
 
-export interface VaultOptions {
+interface VaultOptions {
   dataRoot?: string;
   defaultObBinary: string;
 }

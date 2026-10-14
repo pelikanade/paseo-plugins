@@ -29,7 +29,15 @@ import {
 } from "../shared/contracts";
 import { syncNowRpc } from "../shared/contracts";
 import { copy as text, relativeTime, toneFor, useVaultStatus } from "./status";
-import { ActionButton, Body, Headline, Hint, Notice, Status } from "./ui";
+import {
+  ActionButton,
+  Body,
+  ErrorNotice,
+  Headline,
+  Hint,
+  Notice,
+  Status,
+} from "./ui";
 
 type ReadySettings = Extract<
   SettingsState<typeof settingsSchema>,
@@ -200,10 +208,12 @@ function SettingsEditor({
           </View>
         ) : null}
         {banner ? (
-          <Notice theme={theme} tone="danger" title={banner.title}>
-            <Body theme={theme}>{banner.body}</Body>
-            <Hint theme={theme}>{`Action: ${banner.action}.`}</Hint>
-          </Notice>
+          <ErrorNotice
+            theme={theme}
+            title={banner.title}
+            body={banner.body}
+            action={banner.action}
+          />
         ) : null}
         {status.isError ? (
           <Notice theme={theme} tone="danger" title={text.unknown}>

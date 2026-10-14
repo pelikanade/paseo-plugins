@@ -53,13 +53,6 @@ export function relativeTime(iso: string | null): string {
   return `${date.toLocaleString("en", { month: "short" })} ${String(date.getDate())}, ${date.toTimeString().slice(0, 5)}`;
 }
 
-export function timestamp(iso: string | null): string {
-  if (iso === null) return copy.never;
-  const at = new Date(iso);
-  if (Number.isNaN(at.getTime())) return copy.never;
-  return `${at.toLocaleString("en", { month: "short" })} ${String(at.getDate())}, ${at.toTimeString().slice(0, 5)}`;
-}
-
 export function formatBytes(bytes: number | null): string {
   if (bytes === null) return "—";
   if (bytes < 1024) return `${String(bytes)} B`;

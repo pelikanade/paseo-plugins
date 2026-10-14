@@ -82,11 +82,7 @@ export function Heading({
   );
 }
 
-export function Mono({
-  theme,
-  layout,
-  children,
-}: LayoutProps & { children: string }) {
+function Mono({ theme, layout, children }: LayoutProps & { children: string }) {
   return (
     <Text
       selectable
@@ -272,39 +268,7 @@ export function Notice({
   );
 }
 
-export function PressableRow({
-  theme,
-  layout,
-  accessibilityLabel,
-  onPress,
-  children,
-}: LayoutProps & {
-  accessibilityLabel: string;
-  onPress: () => void;
-  children: ReactNode;
-}) {
-  return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={accessibilityLabel}
-      onPress={onPress}
-      style={({ pressed }) => ({
-        minHeight: layout.compact || layout.platform !== "web" ? 44 : 36,
-        flexDirection: "row",
-        alignItems: "center",
-        gap: 12,
-        paddingHorizontal: 0,
-        paddingVertical: 6,
-        borderRadius: 8,
-        backgroundColor: pressed ? theme.colors.surface2 : "transparent",
-      })}
-    >
-      {children}
-    </Pressable>
-  );
-}
-
-export interface TableColumn {
+interface TableColumn {
   key: string;
   label: string;
   flex?: number;
@@ -313,9 +277,23 @@ export interface TableColumn {
   kind?: "body" | "hint" | "mono";
 }
 
-export interface TableRow {
+interface TableRow {
   key: string;
   cells: readonly (string | null)[];
+}
+
+export function ErrorNotice({
+  theme,
+  title,
+  body,
+  action,
+}: ThemeProps & { title: string; body: string; action: string }) {
+  return (
+    <Notice theme={theme} tone="danger" title={title}>
+      <Body theme={theme}>{body}</Body>
+      <Hint theme={theme}>{`Action: ${action}.`}</Hint>
+    </Notice>
+  );
 }
 
 export function Table({

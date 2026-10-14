@@ -18,16 +18,15 @@ export const settingsDefinition = defineSettings({
   schema: settingsSchema,
 });
 
-export const syncStateSchema = z.enum([
+const syncStateSchema = z.enum([
   "unconfigured",
   "starting",
   "watching",
   "stale",
   "error",
 ]);
-export type SyncState = z.infer<typeof syncStateSchema>;
 
-export const syncErrorCodeSchema = z.enum([
+const syncErrorCodeSchema = z.enum([
   "ob_missing",
   "ob_too_old",
   "token_invalid",
@@ -38,13 +37,13 @@ export const syncErrorCodeSchema = z.enum([
 ]);
 export type SyncErrorCode = z.infer<typeof syncErrorCodeSchema>;
 
-export const repairSchema = z.enum([
+const repairSchema = z.enum([
   "replace_token",
   "set_ob_path",
   "choose_vault",
   "retry",
 ]);
-export type Repair = z.infer<typeof repairSchema>;
+type Repair = z.infer<typeof repairSchema>;
 
 export function repairFor(code: SyncErrorCode): Repair {
   switch (code) {
@@ -62,12 +61,8 @@ export function repairFor(code: SyncErrorCode): Repair {
   }
 }
 
-export const injectionStatusSchema = z.enum([
-  "injected",
-  "not_injected",
-  "truncated",
-]);
-export const injectionFileSchema = z.object({
+const injectionStatusSchema = z.enum(["injected", "not_injected", "truncated"]);
+const injectionFileSchema = z.object({
   path: z.string(),
   status: injectionStatusSchema,
   bytes: z.number().nullable(),
@@ -77,12 +72,12 @@ export const injectionFileSchema = z.object({
 });
 export type InjectionFile = z.infer<typeof injectionFileSchema>;
 
-export const syncConfigSchema = z.object({
+const syncConfigSchema = z.object({
   mode: z.enum(["bidirectional", "pull-only", "mirror-remote"]),
   configs: z.array(z.string()),
 });
 
-export const vaultStatusSchema = z.object({
+const vaultStatusSchema = z.object({
   state: syncStateSchema,
   pulling: z.boolean(),
   error: z
@@ -107,7 +102,7 @@ export const vaultStatusSchema = z.object({
 });
 export type VaultStatus = z.infer<typeof vaultStatusSchema>;
 
-export const remoteVaultSchema = z.object({ id: z.string(), name: z.string() });
+const remoteVaultSchema = z.object({ id: z.string(), name: z.string() });
 
 export const statusRpc = defineRpc({
   name: "obsidian.status",

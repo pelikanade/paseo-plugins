@@ -15,18 +15,11 @@ import {
   vaultExists,
 } from "./vault";
 
-export interface ToolContext {
+interface ToolContext {
   vault: { name: string | null };
   lastSyncedAt: string | null;
   stale: boolean;
 }
-
-export const TOOL_NAMES = [
-  "list_vault",
-  "glob_vault",
-  "grep_vault",
-  "read_vault",
-] as const;
 
 export class Gateway {
   private readonly server = createServer((request, response) => {

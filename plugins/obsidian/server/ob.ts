@@ -5,12 +5,6 @@ import { delimiter, isAbsolute, join } from "node:path";
 import { z } from "zod";
 import type { SyncErrorCode } from "../shared/contracts";
 
-export const OB_EXIT_CODES = {
-  noConfiguration: 3,
-  keyMissing: 2,
-  failed: 1,
-} as const;
-
 export interface ObLocation {
   path: string;
   source: "override" | "path";
@@ -23,7 +17,7 @@ export interface ObRun {
   failure: string | null;
 }
 
-export interface ObVault {
+interface ObVault {
   id: string;
   name: string;
   region: string;
@@ -208,7 +202,7 @@ export function parseConfig(text: string): ObConfig | null {
   return { mode, configs: parsed.data.configs };
 }
 
-export function redact(text: string, token: string | null): string {
+function redact(text: string, token: string | null): string {
   return token ? text.split(token).join("[redacted]") : text;
 }
 

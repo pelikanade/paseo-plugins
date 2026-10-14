@@ -3,13 +3,13 @@ import { join } from "node:path";
 import type { InjectionFile } from "../shared/contracts";
 import { readVault } from "./vault";
 
-export const INJECTION_BYTES_LIMIT = 32 * 1024;
-export const SKILLS_DIRECTORY = "Skills";
+const INJECTION_BYTES_LIMIT = 32 * 1024;
+const SKILLS_DIRECTORY = "Skills";
 
 export const INJECTION_INSTRUCTIONS =
   'The Obsidian vault reached through the obsidian MCP server is read-only: list_vault, glob_vault, grep_vault and read_vault. Its skills are Markdown files in the vault\'s Skills folder, each with name and description front matter: list them with glob_vault "Skills/*.md" and read a skill with read_vault before using it. Use read_vault to open a note before relying on it, and prefer grep_vault to find the right note. Every result carries lastSyncedAt and stale; when stale is true the local copy may be behind the remote. Paths are vault-relative, and .obsidian and the trash folders are not readable.';
 
-export interface InjectionState {
+interface InjectionState {
   skills: InjectionFile[];
   block: string;
 }

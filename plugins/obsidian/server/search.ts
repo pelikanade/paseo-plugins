@@ -2,11 +2,11 @@ import type { z } from "zod";
 import type { searchItemSchema } from "../shared/contracts";
 import { readVault, walkFiles } from "./vault";
 
-export const SEARCH_LIMIT = 50;
-export const SNAPSHOT_BYTES = 8 * 1024;
+const SEARCH_LIMIT = 50;
+const SNAPSHOT_BYTES = 8 * 1024;
 const TRUNCATION_MARKER = "\n[truncated]";
 
-export type SearchItem = z.infer<typeof searchItemSchema>;
+type SearchItem = z.infer<typeof searchItemSchema>;
 
 function noteName(path: string): string {
   return path.split("/").at(-1) ?? path;

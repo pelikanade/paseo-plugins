@@ -16,7 +16,7 @@ export interface SyncFailure {
   message: string | null;
 }
 
-export interface WatcherSnapshot {
+interface WatcherSnapshot {
   running: boolean;
   pulling: boolean;
   lastSuccessAt: string | null;

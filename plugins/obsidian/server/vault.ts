@@ -1,7 +1,7 @@
 import { open, readdir, readFile, realpath, stat } from "node:fs/promises";
 import { join, relative, resolve, sep } from "node:path";
 
-export interface VaultEntry {
+interface VaultEntry {
   path: string;
   name: string;
   type: "file" | "folder";
@@ -10,33 +10,32 @@ export interface VaultEntry {
 }
 
 const DENIED_SEGMENTS = [".obsidian", ".trash", "Trash"];
-export const LIST_LIMIT = 1000;
+const LIST_LIMIT = 1000;
 export const GLOB_LIMIT = 200;
 export const GREP_MATCH_LIMIT = 100;
-export const GREP_BYTES_LIMIT = 200 * 1024;
-export const GREP_SCAN_LIMIT = 64 * 1024 * 1024;
-export const GREP_FILE_LIMIT = 2 * 1024 * 1024;
+const GREP_BYTES_LIMIT = 200 * 1024;
+const GREP_SCAN_LIMIT = 64 * 1024 * 1024;
+const GREP_FILE_LIMIT = 2 * 1024 * 1024;
 export const TOOL_READ_LIMIT = 256 * 1024;
-export const VIEW_READ_LIMIT = 64 * 1024;
-export const WALK_LIMIT = 20000;
-export const BINARY_SNIFF = 8192;
+const WALK_LIMIT = 20000;
+const BINARY_SNIFF = 8192;
 
 export function vaultPath(dataRoot: string): string {
   return join(dataRoot, "vault");
 }
 
-export function denied(relativePath: string): boolean {
+function denied(relativePath: string): boolean {
   return relativePath
     .split("/")
     .some((segment) => DENIED_SEGMENTS.includes(segment));
 }
 
-export type Jail =
+type Jail =
   | { status: "ok"; path: string; relative: string }
   | { status: "denied" }
   | { status: "not_found" };
 
-export async function jail(root: string, input: string): Promise<Jail> {
+async function jail(root: string, input: string): Promise<Jail> {
   const cleaned = input.replace(/^\/+/, "");
   if (input.includes("\0")) return { status: "denied" };
   if (cleaned.split("/").some((segment) => segment === ".."))
@@ -66,14 +65,14 @@ export async function vaultExists(root: string): Promise<boolean> {
   return info?.isDirectory() ?? false;
 }
 
-export interface VaultFile {
+interface VaultFile {
   path: string;
   absolute: string;
   size: number;
   modifiedAt: string;
 }
 
-export interface WalkResult {
+interface WalkResult {
   files: VaultFile[];
   truncated: boolean;
 }
@@ -191,7 +190,7 @@ function escapeLiteral(text: string): string {
   return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-export function globToRegExp(pattern: string): RegExp {
+function globToRegExp(pattern: string): RegExp {
   const normalized = pattern.replace(/^\/+/, "").replace(/\/+$/, "");
   let out = "";
   for (let index = 0; index < normalized.length; index += 1) {
@@ -249,14 +248,14 @@ export async function globVault(
   };
 }
 
-export interface GrepOptions {
+interface GrepOptions {
   regex?: boolean;
   caseSensitive?: boolean;
   include?: string;
   limit?: number;
 }
 
-export interface GrepMatch {
+interface GrepMatch {
   path: string;
   line: number;
   text: string;
@@ -315,7 +314,7 @@ export async function grepVault(
   return { matches, truncated };
 }
 
-export type ReadResult =
+type ReadResult =
   | {
       status: "ok";
       path: string;

@@ -4,8 +4,8 @@ import { dirname } from "node:path";
 import type { SyncErrorCode } from "../shared/contracts";
 import { childEnv, classifyFailure, runOb } from "./ob";
 
-export const TOKEN_FILE_MODE = 0o600;
-export const DATA_DIR_MODE = 0o700;
+const TOKEN_FILE_MODE = 0o600;
+const DATA_DIR_MODE = 0o700;
 
 export async function readToken(path: string): Promise<string | null> {
   try {
@@ -29,7 +29,7 @@ export async function clearToken(path: string): Promise<void> {
   await rm(path, { force: true });
 }
 
-export type TokenValidation =
+type TokenValidation =
   | { status: "saved"; account: string | null }
   | { status: "rejected" }
   | { status: "error"; code: SyncErrorCode };

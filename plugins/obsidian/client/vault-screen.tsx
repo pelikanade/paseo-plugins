@@ -14,6 +14,7 @@ import {
 import {
   ActionButton,
   Body,
+  ErrorNotice,
   Field,
   Headline,
   Heading,
@@ -120,10 +121,12 @@ export function createVaultScreen(openSettings: () => void) {
           </Notice>
         ) : null}
         {banner ? (
-          <Notice theme={theme} tone="danger" title={banner.title}>
-            <Body theme={theme}>{banner.body}</Body>
-            <Hint theme={theme}>{`Action: ${banner.action}.`}</Hint>
-          </Notice>
+          <ErrorNotice
+            theme={theme}
+            title={banner.title}
+            body={banner.body}
+            action={banner.action}
+          />
         ) : null}
         {state === "stale" ? (
           <Notice theme={theme} tone="warning" title={copy.state.stale}>
