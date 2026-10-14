@@ -4,7 +4,7 @@ Let a Paseo agent ask the user for one secret — an API key, token or password 
 
 The agent calls the `request_secret` MCP tool, which blocks until the user answers. The plugin renders a card in the timeline; the typed value travels plugin RPC to the daemon, is written once to a `0600` file on a RAM-backed mount, and the blocked tool call returns that file path. The agent reads the file with `$(cat <path>)`, and the file is deleted automatically. Nothing is stored, granted or reused.
 
-Requires Paseo 0.10.2 or newer and a Linux host with a usable `/dev/shm`.
+Requires Paseo 0.11.2 or newer and a Linux host with a usable `/dev/shm`.
 
 ## Agent tools
 

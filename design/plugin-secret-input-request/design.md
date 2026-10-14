@@ -12,7 +12,7 @@ Scope is a single gesture: an agent asks the user for one secret, the user types
 
 ## Why blocking forces a file handoff
 
-Environment-variable injection cannot be part of a blocking answer in 0.10.2:
+Environment-variable injection cannot be part of a blocking answer in 0.11.2:
 
 - `env` is fixed when the provider process starts. The only way a plugin changes it is the `agent.session_open` hook, and that hook runs on `create` / `resume` / `refresh` / `import` — never mid-turn.
 - Forcing a re-open means daemon-client `refreshAgent`, which first calls `interruptAgentIfRunning` → `cancelAgentRun` (`session.js:868+`, `session.js:3344-3357`). The turn that is waiting on the tool call is canceled, the MCP connection dies, and the pending tool result is lost.
@@ -29,19 +29,22 @@ So a blocking request must deliver something the running turn can consume immedi
 
 Deletion triggers, file permissions, refusal behaviour and the exact path are in the README; the channel decision is ADR 0001, the no-vault decision ADR 0002, the newline decision ADR 0003.
 
-## Verified constraints in 0.10.2 (daemon read, call chains cited)
+## Verified constraints in 0.11.2 (daemon read, call chains cited)
 
-- Timeline is one-way: history flows provider → Paseo (`hydrateTimelineFromProvider`, `agent-manager.js:2141-2144`); nothing converts stored timeline items, `plugin` items included, back into provider prompt content, and plugin items are skipped by the activity curator (`activity-curator.js:110-143`). I1 holds against the timeline.
-- A blocked tool call cannot deadlock the card. The MCP server runs inside the plugin child on its own loopback HTTP listener, while `secrets.submit` travels daemon → plugin as a `requestId`-keyed IPC request dispatched concurrently (`plugins/plugin-process.js:291` registers a plain `process.on("message")` handler that never awaits its predecessor) under a 30 s per-request `REQUEST_TIMEOUT_MS` (`plugins/runtime.js:15,349-356`). The submit handler is a file write, so that timeout is headroom.
+Re-verified after `main` upgraded this checkout from 0.10.2 to 0.11.2; line numbers are 0.11.2, and the semantic changes the upgrade brought are noted where they matter.
+
+- Timeline is one-way: history flows provider → Paseo (`hydrateTimelineFromProvider`, `agent-manager.js:2148`), the only mapping is forward (`plugin-provider.js:1368-1376`), and plugin items are skipped by the activity curator (`activity-curator.js:74-78`; its curation switch has no plugin case). I1 holds against the timeline.
+- A blocked tool call cannot deadlock the card. The MCP server runs inside the plugin child on its own loopback HTTP listener, while `secrets.submit` travels daemon → plugin as a `requestId`-keyed IPC request dispatched concurrently (`plugins/plugin-process.js:495` registers a plain `process.on("message")` handler that never awaits its predecessor) under a 30 s per-request `REQUEST_TIMEOUT_MS` (`plugins/runtime.js:18`, applied at `:404-428`). The submit handler is a file write, so that timeout is headroom.
 - The MCP listener binds at plugin start, and the Paseo API is attached on any contact (agent create, session open, turn start, or a client RPC), because after a plugin reload a live agent can call the tool before the next hook fires; an unattached call answers with a retry hint instead of failing on a dead port.
-- The append path is not gated on an idle agent (`agent-manager.js:1559-1576`), so the card can appear while the tool call is blocked. An unloaded agent rejects the append with `Unknown agent` (`requireAgent`), which happens after a daemon restart until something loads that agent from disk — the timeline fetch does (`session.js:5767`). `publish` therefore retries the append for about three seconds, which the restart scenario exercises.
-- A plugin-created timeline item is persisted in the daemon timeline store and survives reloads; after `rehydrateFromDisk` (`agent-manager.js:874`) items must be re-appended from plugin state.
-- The daemon redacts nothing but HTTP auth headers (`logger.js:19-35`); plugin stdout/stderr is captured verbatim (`plugins/runtime.js:867`) and timeline items are persisted as written. The plugin is the entire redaction layer, so the value must never enter a log call.
-- `agent.session_open` env does reach the provider process (`agent-manager.js:3682-3695` → `plugins/lifecycle/index.js:94-103` → `spawn.js:29` → `paseo-env.js:14-23`) and runs on `refresh` too — the fact that rules env injection out here, because a refresh cancels the waiting turn.
+- The append path is not gated on an idle agent (`agent-manager.js:1566`), so the card can appear while the tool call is blocked. An unloaded agent rejects the append (`requireAgent`, `agent-manager.js:3785-3797`) — the state right after a daemon restart — until something loads that agent from disk; the timeline fetch does (`session.js:5780`) and the plugin append path does not (`session.js:5873-5881`). `publish` therefore retries the append for about three seconds, which the restart scenario exercises.
+- A plugin-created timeline item is persisted in the daemon timeline store (`recordTimeline`, `agent-manager.js:3398-3401`) and survives reloads; after `rehydrateFromDisk` (`agent-manager.js:879-882`) the in-memory timeline is wiped, so items must be re-appended from plugin state. Plugin timeline data is capped at 64 KiB (`agent-timeline-content.js:2-6`), which the request metadata never approaches.
+- The daemon redacts nothing but HTTP auth headers (`logger.js:19-27`); plugin stdout/stderr is captured verbatim (`plugins/runtime.js:26-35`) and timeline items are persisted as written. The plugin is the entire redaction layer, so the value must never enter a log call.
+- `agent.session_open` env does reach the provider process (`agent-manager.js:3710` → `plugins/lifecycle/index.js:25,104` → `paseo-env.js:14`) and runs on `refresh`, but a refresh first interrupts the running turn (`interruptAgentIfRunning` → `cancelAgentRun`, `session.js:878-896`; the refresh path is `session.js:3364-3368`). That is what rules env injection out here.
+- Tool preapproval is gated on the provider contract flag `supportsExactMcpPreapproval`, not on `applyToolPolicy`: `provider-registry.js:388-399` raises `ToolPolicyUnsupportedError` when a provider lacks it, and plugin providers advertise it (`plugin-provider.js:713`).
 
 ## Mirrors Paseo's native ask flow
 
-Paseo already solves "block an agent until the user answers" for its own question tools, and this design copies its lifecycle: each provider maps its ask tool into `AgentPermissionRequest{kind:"question"}` (`omp/agent.js:446,477`, `claude/agent.js:698,2066`, `codex/async-questions.js:24`, `pi/extensions/pi-ask-user/index.js:34`, `opencode/v2/permissions.js:92`), the client renders it, and the answer returns through the permission-response path.
+Paseo already solves "block an agent until the user answers" for its own question tools, and this design copies its lifecycle: each provider maps its ask tool into `AgentPermissionRequest{kind:"question"}` (verified in 0.11.2 at `claude/agent.js:707-708`, and the same shape in the other providers), the client renders it, and the answer returns through the permission-response path. There is still no permission-timeout constant anywhere in the daemon, so an unbounded block matches native behaviour.
 
 What is shared: a pending registry keyed by a stable id resolved by one client call; **no timeout** (there is no permission-timeout constant anywhere in the daemon, which is why the unbounded block reproduces native behaviour); in-memory state that is rebuilt only if the producer replays it (hence the card's `gone` state after a reload); cancel as a first-class answer rather than a dropped request.
 
