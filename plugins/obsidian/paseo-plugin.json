@@ -1,0 +1,8 @@
+{
+  "id": "obsidian",
+  "name": "Obsidian vault",
+  "description": "Read-only Obsidian vault for every agent: pull-only Sync through the official headless CLI, four vault tools, prompt injection and a note picker in the composer.",
+  "requirements": {
+    "paseo": ">=0.11.0"
+  }
+}

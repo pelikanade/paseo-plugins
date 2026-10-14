@@ -83,6 +83,41 @@ export async function command(binary, args, options = {}) {
   }
 }
 
+export async function ensureOb(t) {
+  for (const directory of (process.env.PATH ?? "").split(":")) {
+    if (!directory) continue;
+    try {
+      await access(join(directory, "ob"));
+      return null;
+    } catch (error) {
+      if (error.code !== "ENOENT") throw error;
+    }
+  }
+  const prefix = await mkdtemp(join(tmpdir(), "paseo-ob-"));
+  t.after(async () => {
+    await rm(prefix, { recursive: true, force: true });
+  });
+  try {
+    await command(
+      "npm",
+      [
+        "install",
+        "--prefix",
+        prefix,
+        "--no-audit",
+        "--no-fund",
+        "obsidian-headless@0.0.14",
+      ],
+      { timeout: 300000 },
+    );
+  } catch (error) {
+    throw new Error(
+      `The obsidian E2E suite needs the Obsidian headless CLI: install it with "npm install -g obsidian-headless" or place ob on PATH (${error.message})`,
+    );
+  }
+  return join(prefix, "node_modules", ".bin");
+}
+
 export async function runtime(t, options = {}) {
   assert.equal(process.platform, "linux", "Session E2E requires Linux /proc");
   const temporary = await mkdtemp(join(tmpdir(), "paseo-plugin-e2e-"));
