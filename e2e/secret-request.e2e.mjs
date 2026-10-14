@@ -1,6 +1,15 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { readFile, readdir, stat, statfs } from "node:fs/promises";
+import {
+  mkdir,
+  readFile,
+  readdir,
+  rm,
+  stat,
+  statfs,
+  utimes,
+  writeFile,
+} from "node:fs/promises";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 import test from "node:test";
@@ -34,8 +43,16 @@ async function treeContains(directory, needle) {
       if (nested !== null) return nested;
       continue;
     }
-    if (entry.isFile() && (await readFile(path, "utf8")).includes(needle))
-      return path;
+    if (entry.isFile()) {
+      let content;
+      try {
+        content = await readFile(path, "utf8");
+      } catch (error) {
+        if (error.code === "ENOENT") continue;
+        throw error;
+      }
+      if (content.includes(needle)) return path;
+    }
   }
   return null;
 }
@@ -238,6 +255,94 @@ test(
         );
         assert.equal(repeatedAgain.status, "delivered");
         assert.notEqual(repeatedAgain.path, result.path);
+      },
+    );
+
+    await f.test(
+      "a delivery survives the caller's timeout and a retry collects it",
+      async () => {
+        const label = `Timed out token ${randomUUID()}`;
+        const timedOut = await mcp
+          .callTool(
+            {
+              name: "request_secret",
+              arguments: {
+                label,
+                description: "Provided for the end-to-end run.",
+                hint: "Any value.",
+              },
+            },
+            undefined,
+            { timeout: 1500 },
+          )
+          .then(
+            (answer) => {
+              throw new Error(
+                `a blocked call answered instead of timing out: ${JSON.stringify(answer)}`,
+              );
+            },
+            (error) => error,
+          );
+        assert.equal(timedOut.code, -32001, String(timedOut));
+        const card = await until(
+          async () => (await items()).at(-1),
+          (value) =>
+            value !== undefined &&
+            value.item.data.label === label &&
+            value.item.data.status === "pending",
+        );
+        const requestId = card.item.data.requestId;
+        const delivered = await submit(requestId, SENTINEL);
+        assert.equal(delivered.status, "delivered");
+        assert.ok(delivered.path, JSON.stringify(delivered));
+        assert.equal(await readFile(delivered.path, "utf8"), SENTINEL);
+        const unrelated = await request("Unrelated token", "Any value.");
+        assert.notEqual(
+          unrelated.item.item.data.requestId,
+          requestId,
+          "a request under a different label must not collect another request's delivery",
+        );
+        await f.rpc("secret-request", "secret-request.cancel", {
+          agentId: agent.id,
+          requestId: unrelated.item.item.data.requestId,
+        });
+        await unrelated.pending;
+        const cards = (await items()).length;
+        const collected = await mcp.callTool(
+          {
+            name: "request_secret",
+            arguments: { label: `${label} (retry)` },
+          },
+          undefined,
+          { timeout: 20000 },
+        );
+        assert.notEqual(collected.isError, true, JSON.stringify(collected));
+        const recovered = JSON.parse(collected.content[0].text);
+        assert.equal(recovered.requestId, requestId);
+        assert.equal(recovered.path, delivered.path);
+        assert.equal(recovered.label, label);
+        assert.equal((await items()).length, cards);
+        assert.deepEqual(
+          await f.rpc("secret-request", "secret-request.status", {
+            agentId: agent.id,
+            requestId,
+          }),
+          {
+            status: "delivered",
+            handoffExpiresAt: delivered.handoffExpiresAt,
+          },
+        );
+        const repeated = await request(label, "Any value.");
+        assert.notEqual(
+          repeated.item.item.data.requestId,
+          requestId,
+          "collecting a delivery must free its label for a new request",
+        );
+        await f.rpc("secret-request", "secret-request.cancel", {
+          agentId: agent.id,
+          requestId: repeated.item.item.data.requestId,
+        });
+        await repeated.pending;
       },
     );
 
@@ -476,5 +581,39 @@ test(
       ).length,
       0,
     );
+  },
+);
+
+test(
+  "an expired handoff left by an earlier lifetime is swept while a live one is kept",
+  { timeout: 180000 },
+  async (t) => {
+    const f = await runtime(t);
+    await f.install("secret-request");
+    const base = `/dev/shm/paseo-${String(process.getuid())}-secret-request`;
+    const aged = join(base, randomUUID());
+    const fresh = join(base, randomUUID());
+    const agedFile = join(aged, randomUUID());
+    const freshFile = join(fresh, randomUUID());
+    const deadline = new Date(Date.now() - TTL_MS - 60000);
+    t.after(async () => {
+      await rm(aged, { recursive: true, force: true });
+      await rm(fresh, { recursive: true, force: true });
+    });
+    await mkdir(aged, { mode: 0o700 });
+    await mkdir(fresh, { mode: 0o700 });
+    await writeFile(agedFile, SENTINEL, { mode: 0o600 });
+    await writeFile(freshFile, SENTINEL, { mode: 0o600 });
+    await utimes(agedFile, deadline, deadline);
+    await utimes(aged, deadline, deadline);
+    await f.client.reloadPlugin("secret-request");
+    await until(
+      () => exists(agedFile),
+      (present) => present === false,
+      20000,
+    );
+    assert.equal(await exists(aged), false);
+    assert.equal(await exists(freshFile), true);
+    assert.equal(await exists(fresh), true);
   },
 );

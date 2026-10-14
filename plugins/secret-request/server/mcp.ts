@@ -13,6 +13,20 @@ type Api = PluginHandlerContext["paseo"];
 
 const BODY_LIMIT = 131072;
 
+const envelopeSchema = z.looseObject({
+  method: z.string(),
+  id: z.union([z.string(), z.number()]).optional(),
+  params: z
+    .looseObject({
+      requestId: z.union([z.string(), z.number()]).optional(),
+    })
+    .optional(),
+});
+
+function callKey(agentId: string, id: string | number): string {
+  return `${agentId}\u0000${String(id)}`;
+}
+
 export class Gateway {
   private readonly server = createServer((request, response) => {
     this.handle(request, response).catch((error: unknown) => {
@@ -26,6 +40,7 @@ export class Gateway {
   });
   private started: Promise<number> | undefined;
   private readonly connections = new Set<McpServer>();
+  private readonly calls = new Map<string, AbortController>();
 
   private paseo: Api | undefined;
 
@@ -92,6 +107,7 @@ export class Gateway {
   private async call(
     agentId: string,
     input: unknown,
+    signal: AbortSignal | undefined,
   ): Promise<{ content: { type: "text"; text: string }[]; isError?: true }> {
     const paseo = this.paseo;
     if (paseo === undefined)
@@ -108,6 +124,7 @@ export class Gateway {
       agentId,
       requestInputSchema.parse(input),
       paseo,
+      signal,
     );
     if (result.status === "unavailable")
       return {
@@ -166,6 +183,32 @@ export class Gateway {
       response.writeHead(400).end();
       return;
     }
+    const envelope = envelopeSchema.safeParse(body);
+    if (
+      envelope.success &&
+      envelope.data.method === "notifications/cancelled"
+    ) {
+      const cancel = envelope.data.params?.requestId;
+      if (cancel !== undefined)
+        this.calls.get(callKey(agentId, cancel))?.abort();
+      response.writeHead(202).end();
+      return;
+    }
+    let caller: AbortController | undefined;
+    let callerKey: string | undefined;
+    if (
+      envelope.success &&
+      envelope.data.method === "tools/call" &&
+      envelope.data.id !== undefined
+    ) {
+      const controller = new AbortController();
+      caller = controller;
+      callerKey = callKey(agentId, envelope.data.id);
+      this.calls.set(callerKey, controller);
+      response.once("close", () => {
+        controller.abort();
+      });
+    }
     const server = new McpServer({ name: "secret-request", version: "0.1.0" });
     this.connections.add(server);
     server.registerTool(
@@ -175,12 +218,14 @@ export class Gateway {
           "Ask the user for one secret (API key, token, password) and block until they answer, cancel, or the request is gone.",
           "Returns a path to a RAM-backed file holding the value, never the value itself: use $(cat <path>) inside the command that needs it.",
           "Never print, log, echo or copy what you read, and never report its length, a prefix, a suffix or a hash of it either — size and fragments narrow a guess that should not be narrowed.",
+          "One request per agent is live at a time, and a retry resumes it instead of stacking a second card, so a call that ends in a timeout or a cancellation is retried with the same label until it answers.",
+          'A retry under the same label also collects a value the user already typed for a call that never came back; a trailing qualifier such as "(retry)" still matches. Once a caller has received a path, that label starts a new request instead.',
           "The card is a single-line masked field, so a multi-line secret (PEM, SSH key) either has to be base64-encoded by the user — put the exact command in `hint` — or arrives with its newlines stripped and you repair it.",
           "The file is deleted 15 minutes after delivery, and nothing can delete it earlier, so read it only where the value is needed.",
         ].join(" "),
         inputSchema: requestInputSchema,
       },
-      async (input) => this.call(agentId, input),
+      async (input) => this.call(agentId, input, caller?.signal),
     );
     const transport = new StreamableHTTPServerTransport({
       sessionIdGenerator: undefined,
@@ -191,10 +236,16 @@ export class Gateway {
       this.connections.delete(server);
     });
     await server.connect(transport);
-    await transport.handleRequest(request, response, body);
+    try {
+      await transport.handleRequest(request, response, body);
+    } finally {
+      if (callerKey !== undefined) this.calls.delete(callerKey);
+    }
   }
 
   async shutdown() {
+    for (const caller of this.calls.values()) caller.abort();
+    this.calls.clear();
     if (this.started) await this.started;
     await Promise.all(
       Array.from(this.connections, (connection) => connection.close()),

@@ -21,12 +21,24 @@ The short-lived RAM-backed file holding a delivered secret, whose path is the on
 _Avoid_: drop file, secret file, temp file, vault
 
 **Delivered**:
-The state of a request whose secret is in the handoff file and whose path has been returned to the agent.
+The state of a request whose secret is in the handoff file. It says nothing about whether a caller received the path; see _collected_.
 _Avoid_: stored, saved, provisioned
+
+**Collected**:
+The state of a delivered request whose path a live caller received. Its label is free again, so the next call under it starts a new request.
+_Avoid_: read, consumed, taken
+
+**Uncollected delivery**:
+A delivery no live caller received, because the call that was waiting timed out or was cancelled. The next call under the same label hands the path over until the TTL expires.
+_Avoid_: missed, orphan, abandoned, pending
 
 **Release**:
 Deleting a handoff file before its TTL, either by the agent or by the plugin.
 _Avoid_: revoke, delete, forget
+
+**Sweep**:
+Deleting handoff files that are past their TTL out of the directories of earlier daemon lifetimes, at plugin start and once a minute, and removing the directories those files leave empty. Release deletes one file while its agent still exists; a sweep is what a value left by a daemon that is gone cannot escape.
+_Avoid_: purge, cleanup, garbage collection
 
 **Reveal**:
 Showing a secret's value back to a human or an agent after it was submitted. This plugin has no reveal.

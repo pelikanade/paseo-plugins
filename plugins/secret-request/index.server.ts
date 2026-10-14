@@ -6,7 +6,7 @@ import { cancelRpc, statusRpc, submitRpc } from "./shared/contracts";
 import { MCP_SERVER_NAME, SESSION_ENV_KEY } from "./shared/protocol";
 
 const instructions =
-  "The secret-request MCP tool asks the user for one secret; read its description before calling it and follow it exactly, above all the rule that the value must never be echoed, logged, measured or copied.";
+  "The secret-request MCP tool asks the user for one secret; read its description before calling it and follow it exactly, above all the rule that the value must never be echoed, logged, measured or copied, and that a call which times out or is canceled is retried under the same label instead of being abandoned.";
 
 export default function contribute(server: PluginServerContext) {
   const storage = new Storage();
