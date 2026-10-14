@@ -1,7 +1,7 @@
 {
   "id": "hello-paseo",
-  "description": "A starter plugin with a cross-platform greeting screen and daemon RPC.",
+  "description": "A starter plugin with a cross-platform greeting surface and daemon RPC.",
   "requirements": {
-    "paseo": ">=0.11.2"
+    "paseo": ">=0.11.0"
   }
 }

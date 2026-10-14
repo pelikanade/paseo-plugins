@@ -18,7 +18,7 @@ With direnv installed, `direnv allow` activates the same shell through `.envrc`.
 
 ```text
 plugins/
-  hello-paseo/                  # Official starter: client screen + daemon RPC
+  hello-paseo/                  # Official starter: client surface + daemon RPC
   devenv/                       # Trust-gated environments + Bend2 policy
   generative-ui/                # Native Chat cards + scoped MCP + agent skill
 scripts/
@@ -59,7 +59,7 @@ pnpm check
 
 IDs start with a lowercase letter and use lowercase letters, digits, or hyphens. The generator refuses a nonempty destination. New packages are private until you prepare a release.
 
-The CLI and plugin SDK are pinned to **0.11.2**. The scaffold registers a screen with `addScreen` and its sidebar entry with `addSidebarHeaderItem`, which navigates through the `SidebarRow` component; the 0.10-era `addSurface` and `addSidebarItem` survive only as deprecated aliases. Use the installed SDK declarations as the authority for this pinned release. Upgrade CLI, SDK, and manifest compatibility together.
+The CLI, client, and plugin SDK are pinned to **0.11.2**, the release this workspace targets. The scaffold and `plugins/hello-paseo` register UI with `addScreen` and `addSidebarHeaderItem`; `addSurface`, `addSidebarItem`, and `openSurface` are deprecated aliases that `pnpm lint` rejects. Use the installed SDK declarations for this pinned release. Upgrade CLI, SDK, and manifest compatibility together.
 
 ## Try the starter in Paseo
 

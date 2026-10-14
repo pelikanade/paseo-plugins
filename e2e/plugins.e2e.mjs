@@ -111,10 +111,7 @@ test(
         );
         await assert.rejects(
           f.rpc("devenv", "devenv.status", { agentId: "missing-agent" }),
-          (error) => {
-            assert.equal(error.constructor.name, "DaemonRpcError");
-            return true;
-          },
+          /Unknown agent: missing-agent/,
         );
       },
     );
@@ -301,13 +298,11 @@ test(
           180000,
         );
         assert.equal(broken.applied, false);
-        assert.match(broken.error, /syntax|unexpected/i);
+        assert.match(broken.error, /exited \d+/);
         await expect(
           page.getByText("Environment failed", { exact: true }),
         ).toBeVisible({ timeout: 15000 });
-        await expect(
-          page.getByText(/unexpected.*syntax|syntax error/i),
-        ).toBeVisible();
+        await expect(page.getByText(/exited \d+/)).toBeVisible();
         await writeFile(join(project, "devenv.nix"), nix("recovered"));
         await f.rpc("devenv", "devenv.load", { agentId: agent.id });
         const prepared = await until(

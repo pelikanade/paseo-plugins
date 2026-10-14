@@ -23,12 +23,12 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
-    "@getpaseo/cli": "0.11.2",
-    "@getpaseo/client": "0.11.2",
+    "@getpaseo/cli": "catalog:",
+    "@getpaseo/client": "catalog:",
     "@playwright/test": "1.56.1",
     "eslint": "^10.11.0",
-    "prettier": "^3.6.2",
-    "typescript": "^5.9.3",
+    "prettier": "catalog:",
+    "typescript": "catalog:",
     "typescript-eslint": "^8.70.1"
   }
 }
