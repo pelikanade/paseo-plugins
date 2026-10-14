@@ -1,0 +1,7 @@
+{
+  "id": "secret-request",
+  "description": "Let an agent ask for one secret in Chat: a masked card in the conversation, a RAM-backed handoff file, nothing kept.",
+  "requirements": {
+    "paseo": ">=0.11.2"
+  }
+}

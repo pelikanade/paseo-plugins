@@ -1,0 +1,32 @@
+{
+  "name": "@pelikanade/paseo-plugin-secret-request",
+  "version": "0.1.0",
+  "license": "MIT",
+  "private": true,
+  "files": [
+    "paseo-plugin.json",
+    "index.client.ts",
+    "index.client.tsx",
+    "index.server.ts",
+    "index.server.tsx",
+    "client/",
+    "server/",
+    "shared/",
+    "README.md"
+  ],
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@getpaseo/plugin": "catalog:",
+    "@types/node": "catalog:",
+    "@types/react": "catalog:",
+    "react": "catalog:",
+    "react-native": "catalog:",
+    "typescript": "catalog:",
+    "zod": "catalog:"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.31.0"
+  }
+}
