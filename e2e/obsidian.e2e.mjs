@@ -1,5 +1,12 @@
 import assert from "node:assert/strict";
-import { mkdir, readdir, readFile, symlink, writeFile } from "node:fs/promises";
+import {
+  mkdir,
+  readdir,
+  readFile,
+  rm,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
 import { createRequire } from "node:module";
 import { join } from "node:path";
 import test from "node:test";
@@ -51,7 +58,7 @@ const seedVault = async (home) => {
     ".obsidian",
     ".trash",
     "Trash",
-    ".paseo/skills",
+    "Skills",
   ])
     await mkdir(join(vault, directory), { recursive: true });
   await writeFile(join(vault, "Inbox", "A.md"), "# A\n\nweekly review notes\n");
@@ -71,21 +78,14 @@ const seedVault = async (home) => {
   await writeFile(join(vault, ".trash", "deleted.md"), "gone\n");
   await writeFile(join(vault, "Trash", "deleted.md"), "gone\n");
   await writeFile(
-    join(vault, ".paseo", "system.md"),
-    "Vault conventions: keep notes short.\n",
-  );
-  await writeFile(
-    join(vault, ".paseo", "skills", "alpha.md"),
+    join(vault, "Skills", "alpha.md"),
     "---\nname: alpha\ndescription: First vault skill\n---\n\nbody alpha only\n",
   );
   await writeFile(
-    join(vault, ".paseo", "skills", "beta.md"),
+    join(vault, "Skills", "beta.md"),
     "---\nname: beta\ndescription: Second vault skill\n---\n\nbody beta only\n",
   );
-  await writeFile(
-    join(vault, ".paseo", "skills", "gamma.md"),
-    "no front matter here\n",
-  );
+  await writeFile(join(vault, "Skills", "gamma.md"), "no front matter here\n");
   await symlink("/etc/passwd", join(vault, "escape.md"));
   return vault;
 };
@@ -156,17 +156,7 @@ test(
         assert.equal(view.sync, null);
         assert.equal(view.lastSuccessAt, null);
         assert.equal(view.staleAfterSeconds, 900);
-        assert.deepEqual(view.injection, {
-          systemPrompt: {
-            path: ".paseo/system.md",
-            status: "not_injected",
-            bytes: null,
-            modifiedAt: null,
-            name: null,
-            description: null,
-          },
-          skills: [],
-        });
+        assert.deepEqual(view.injection, { skills: [] });
         assert.deepEqual(await syncProcesses(), []);
         assert.deepEqual(
           await f.rpc("obsidian", "obsidian.vault.search", { query: "note" }),
@@ -218,7 +208,7 @@ test(
         const listing = await call("list_vault", {});
         assert.deepEqual(
           listing.entries.map((entry) => entry.path).sort(),
-          [".paseo", "attachments", "Inbox", "Projects"].sort(),
+          ["Skills", "attachments", "Inbox", "Projects"].sort(),
         );
         assert.deepEqual(
           listing.entries.map((entry) => entry.type),
@@ -246,13 +236,12 @@ test(
 
         const globbed = await call("glob_vault", { pattern: "**/*.md" });
         assert.deepEqual(globbed.paths.sort(), [
-          ".paseo/skills/alpha.md",
-          ".paseo/skills/beta.md",
-          ".paseo/skills/gamma.md",
-          ".paseo/system.md",
           "Inbox/A.md",
           "Inbox/Long note.md",
           "Projects/2026/Project plan.md",
+          "Skills/alpha.md",
+          "Skills/beta.md",
+          "Skills/gamma.md",
         ]);
 
         const grepped = await call("grep_vault", {
@@ -335,7 +324,7 @@ test(
         const record = await until(
           () => persistedAgent(f.home, created.id),
           (value) =>
-            value?.config?.systemPrompt?.includes("Vault conventions") === true,
+            value?.config?.systemPrompt?.includes("First vault skill") === true,
           30000,
         );
         const prompt = record.config.systemPrompt;
@@ -343,21 +332,20 @@ test(
           prompt,
           /list_vault, glob_vault, grep_vault and read_vault/,
         );
-        assert.match(prompt, /Vault conventions: keep notes short\./);
         assert.doesNotMatch(prompt, /body alpha only/);
         assert.doesNotMatch(prompt, /body beta only/);
         assert.doesNotMatch(prompt, /gamma/);
+        assert.match(prompt, /glob_vault "Skills\/\*\.md"/);
         const alpha = prompt.indexOf("alpha: First vault skill");
         const beta = prompt.indexOf("beta: Second vault skill");
         assert.ok(alpha > 0 && beta > alpha, prompt);
-        assert.match(prompt, /read_vault "\.paseo\/skills\/alpha\.md"/);
+        assert.match(prompt, /read_vault "Skills\/alpha\.md"/);
         assert.equal(record.config.mcpServers.obsidian.type, "http");
 
         const view = await until(
           status,
-          (value) => value.injection.systemPrompt.status === "injected",
+          (value) => value.injection.skills.length === 3,
         );
-        assert.ok((view.injection.systemPrompt.bytes ?? 0) > 0);
         assert.deepEqual(
           view.injection.skills.map((skill) => [
             skill.path,
@@ -366,34 +354,30 @@ test(
             skill.description,
           ]),
           [
-            [
-              ".paseo/skills/alpha.md",
-              "injected",
-              "alpha",
-              "First vault skill",
-            ],
-            [".paseo/skills/beta.md", "injected", "beta", "Second vault skill"],
-            [".paseo/skills/gamma.md", "not_injected", null, null],
+            ["Skills/alpha.md", "injected", "alpha", "First vault skill"],
+            ["Skills/beta.md", "injected", "beta", "Second vault skill"],
+            ["Skills/gamma.md", "not_injected", null, null],
           ],
         );
 
-        const body = await call("read_vault", {
-          path: ".paseo/skills/alpha.md",
-        });
+        const body = await call("read_vault", { path: "Skills/alpha.md" });
         assert.match(body.text, /body alpha only/);
 
         await writeFile(
-          join(vault, ".paseo", "system.md"),
-          `# Big\n\n${"x".repeat(33 * 1024)}\n`,
+          join(vault, "Skills", "large.md"),
+          `---\nname: large\ndescription: A skill over the read cap\n---\n\n${"x".repeat(33 * 1024)}\n`,
         );
         const truncated = await until(
           status,
-          (value) => value.injection.systemPrompt.status === "truncated",
+          (value) =>
+            value.injection.skills.find(
+              (skill) => skill.path === "Skills/large.md",
+            )?.status === "truncated",
         );
-        assert.ok(
-          (truncated.injection.systemPrompt.bytes ?? 0) > 32 * 1024,
-          JSON.stringify(truncated.injection.systemPrompt),
+        const large = truncated.injection.skills.find(
+          (skill) => skill.path === "Skills/large.md",
         );
+        assert.ok((large?.bytes ?? 0) > 32 * 1024, JSON.stringify(large));
         const capped = await f.createAgent(f.temporary, "Obsidian cap E2E");
         const cappedRecord = await until(
           () => persistedAgent(f.home, capped.id),
@@ -402,18 +386,34 @@ test(
           30000,
         );
         assert.ok(
-          cappedRecord.config.systemPrompt.length < 40 * 1024,
+          cappedRecord.config.systemPrompt.length < 8 * 1024,
           String(cappedRecord.config.systemPrompt.length),
         );
 
+        await rm(join(vault, "Skills", "large.md"), { force: true });
+        await until(status, (value) => value.injection.skills.length === 3);
+      },
+    );
+
+    await f.test(
+      "a skill added after creation is readable after an agent reload",
+      async () => {
+        const delta = "Skills/delta.md";
         await writeFile(
-          join(vault, ".paseo", "system.md"),
-          "Vault conventions: keep notes short.\n",
+          join(vault, delta),
+          "---\nname: delta\ndescription: Added later\n---\n\nbody delta only\n",
         );
-        await until(
-          status,
-          (value) => value.injection.systemPrompt.status === "injected",
+        await f.cli(["agent", "reload", agent.id]);
+        const listed = await call("glob_vault", { pattern: "Skills/*.md" });
+        assert.equal(
+          listed.paths.includes(delta),
+          true,
+          JSON.stringify(listed),
         );
+        const deltaBody = await call("read_vault", { path: delta });
+        assert.match(deltaBody.text, /body delta only/);
+        await rm(join(vault, delta), { force: true });
+        await until(status, (value) => value.injection.skills.length === 3);
       },
     );
 
@@ -452,7 +452,7 @@ test(
         });
         assert.deepEqual(
           empty.items.map((entry) => entry.title),
-          ["A", "Long note", "Project plan"],
+          ["A", "alpha", "beta", "gamma", "Long note", "Project plan"],
         );
       },
     );
@@ -548,7 +548,7 @@ test(
           page.getByText("Second vault skill", { exact: true }),
         ).toBeVisible();
         await expect(
-          page.getByText(".paseo/skills/gamma.md", { exact: true }),
+          page.getByText("Skills/gamma.md", { exact: true }),
         ).toBeVisible();
         await expect(
           page.getByText("Not injected", { exact: true }),
@@ -560,25 +560,6 @@ test(
         await expect(
           page.getByText("Connection", { exact: true }),
         ).toBeVisible();
-        await expect(page.getByText("Set up", { exact: true })).toBeVisible();
-        await expect(
-          page
-            .getByTestId("settings-detail-pane")
-            .getByText("Path", { exact: true })
-            .first(),
-        ).toBeVisible();
-        await expect(
-          page
-            .getByTestId("settings-detail-pane")
-            .getByText("Injected", { exact: true })
-            .first(),
-        ).toBeVisible();
-        await expect(
-          page.getByText("First sync", { exact: true }),
-        ).toBeVisible();
-        await expect(
-          page.getByText("To do", { exact: true }).last(),
-        ).toBeVisible();
         await expect(
           page.getByText("No token stored", { exact: true }),
         ).toBeVisible();
@@ -589,9 +570,24 @@ test(
         await expect(
           page.getByRole("button", { name: "Remove token" }),
         ).toHaveCount(0);
-        const addTokenButton = page.getByRole("button", { name: "Add token" });
-        await expect(addTokenButton).toBeVisible();
-        await addTokenButton.click();
+        await expect(
+          page.getByRole("button", { name: "Change token" }),
+        ).toHaveCount(0);
+        const setUpVaultButton = page.getByRole("button", {
+          name: "Set up vault",
+        });
+        await expect(setUpVaultButton).toBeVisible();
+        const tokenState = page.getByText("No token stored", { exact: true });
+        const stateBox = await tokenState.boundingBox();
+        const addBox = await setUpVaultButton.boundingBox();
+        assert.ok(stateBox && addBox, "token state and action are laid out");
+        const stateCentre = stateBox.y + stateBox.height / 2;
+        const addCentre = addBox.y + addBox.height / 2;
+        assert.ok(
+          Math.abs(stateCentre - addCentre) < 4,
+          `token state and action share one row: ${String(stateCentre)} vs ${String(addCentre)}`,
+        );
+        await setUpVaultButton.click();
         await expect(page.getByPlaceholder("Paste sync token")).toBeVisible();
         const saveTokenButton = page.getByRole("button", {
           name: "Save token",
@@ -609,7 +605,7 @@ test(
         await cancelTokenButton.click();
         await expect(page.getByPlaceholder("Paste sync token")).toHaveCount(0);
         await expect(
-          page.getByRole("button", { name: "Add token" }),
+          page.getByRole("button", { name: "Set up vault" }),
         ).toBeVisible();
         await expect(
           page
@@ -647,9 +643,53 @@ test(
             .getByText("Vault", { exact: true })
             .first(),
         ).toBeVisible();
+        await writeSettings({ vaultId: null, vaultName: null });
         await expect(
           page.getByText("Work notes (Not found)", { exact: true }),
+        ).toHaveCount(0, { timeout: 20000 });
+        await expect(
+          page.getByRole("button", { name: "Change vault" }),
+        ).toHaveCount(0);
+        await writeSettings({ vaultId: "seeded", vaultName: "Work notes" });
+        const vaultValue = page.getByText("Work notes (Not found)", {
+          exact: true,
+        });
+        await expect(vaultValue).toBeVisible({ timeout: 20000 });
+        await expect(vaultValue).toBeVisible();
+        const changeVaultButton = page.getByRole("button", {
+          name: "Change vault",
+        });
+        const syncNowButton = page.getByRole("button", { name: "Sync now" });
+        await expect(changeVaultButton).toBeVisible();
+        await expect(syncNowButton).toBeVisible();
+        const centre = async (locator) => {
+          const box = await locator.boundingBox();
+          assert.ok(box, "element is laid out");
+          return box.y + box.height / 2;
+        };
+        await changeVaultButton.click();
+        await expect(
+          page.getByText("No token stored", { exact: true }).last(),
         ).toBeVisible();
+        await page.getByRole("button", { name: "Cancel" }).last().click();
+        await expect(page.getByRole("button", { name: "Cancel" })).toHaveCount(
+          0,
+        );
+        await syncNowButton.click();
+        await expect(
+          page.getByText("Add a token and choose a vault first.", {
+            exact: true,
+          }),
+        ).toBeVisible();
+        const vaultCentre = await centre(vaultValue);
+        assert.ok(
+          Math.abs(vaultCentre - (await centre(changeVaultButton))) < 4,
+          "the vault state and its actions share one row",
+        );
+        assert.ok(
+          Math.abs(vaultCentre - (await centre(syncNowButton))) < 4,
+          "the vault state and its actions share one row",
+        );
       },
     );
 

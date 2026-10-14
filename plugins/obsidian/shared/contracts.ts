@@ -103,10 +103,7 @@ export const vaultStatusSchema = z.object({
   sync: syncConfigSchema.nullable(),
   lastSuccessAt: z.string().nullable(),
   staleAfterSeconds: z.number(),
-  injection: z.object({
-    systemPrompt: injectionFileSchema,
-    skills: z.array(injectionFileSchema),
-  }),
+  injection: z.object({ skills: z.array(injectionFileSchema) }),
 });
 export type VaultStatus = z.infer<typeof vaultStatusSchema>;
 

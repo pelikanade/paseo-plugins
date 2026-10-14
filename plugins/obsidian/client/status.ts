@@ -91,14 +91,10 @@ export const copy = {
     `Out of date. Last successful sync ${relative}. Agents read the last copy.`,
   recovered: "Sync recovered. Up to date.",
   openSettings: "Open settings",
-  setupHeading: "Set up",
-  done: "Done",
-  todo: "To do",
   unknown: "Unknown",
   skillsHeading: "Skills",
   skillColumns: {
     skill: "Skill",
-    path: "Path",
     description: "Description",
     status: "Status",
     size: "Size",
@@ -108,18 +104,7 @@ export const copy = {
     truncated: "Truncated",
     skipped: "Not injected",
   },
-  skillsNone: "No skills in .paseo/skills/",
-  checklist: (
-    hasToken: boolean,
-    hasOb: boolean,
-    hasVault: boolean,
-    synced: boolean,
-  ) => [
-    { label: "Sync token", done: hasToken },
-    { label: "Obsidian CLI (ob)", done: hasOb },
-    { label: "Vault", done: hasVault },
-    { label: "First sync", done: synced },
-  ],
+  skillsNone: "No skills in Skills/",
   sections: {
     connection: "Connection",
     cli: "Obsidian CLI (ob)",
@@ -133,9 +118,9 @@ export const copy = {
     none: "No token stored",
     placeholder: "Paste sync token",
   },
-  addToken: "Add token",
+  addToken: "Set up vault",
   saveToken: "Save token",
-  replaceToken: "Replace token",
+  changeToken: "Change token",
   saving: "Saving…",
   removeToken: "Remove token",
   settingsLoading: "Loading settings…",
@@ -149,9 +134,13 @@ export const copy = {
   },
   vaultSelect: {
     label: "Remote vault",
-    placeholder: "Choose a vault",
+    none: "No vault selected",
+    choose: "Choose vault",
+    change: "Change vault",
     notFound: "Not found",
   },
+  loadingVaults: "Loading vaults…",
+  noRemoteVaults: "No remote vaults on this account.",
   syncNow: "Sync now",
   switchVault: "Switch vault",
   reset: "Reset settings",
@@ -166,6 +155,7 @@ export const copy = {
     tokenRejected: "Token rejected. Nothing was saved.",
     syncStarted: "Sync started.",
     syncBusy: "Sync is already running.",
+    syncUnconfigured: "Add a token and choose a vault first.",
   },
   errors: {
     ob_missing: {
@@ -181,7 +171,7 @@ export const copy = {
     token_invalid: {
       title: "Token rejected",
       body: "Obsidian rejected the sync token. It may be expired or revoked.",
-      action: "Replace token",
+      action: "Change token",
     },
     vault_missing: {
       title: "Vault not found",

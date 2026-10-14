@@ -257,7 +257,7 @@ export function installVault(
       sync,
       lastSuccessAt,
       staleAfterSeconds: STALE_AFTER_SECONDS,
-      injection: { systemPrompt: files.systemPrompt, skills: files.skills },
+      injection: { skills: files.skills },
     };
   };
 

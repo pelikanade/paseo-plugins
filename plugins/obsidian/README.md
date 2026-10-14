@@ -27,13 +27,16 @@ shows the repair in settings.
    ob login
    ```
 
-2. Open Settings → Plugins → Obsidian vault, press **Add token** (or **Replace token**), paste the token
-   and press **Save token**. The paste field and the save action appear only while editing; **Cancel**
-   leaves the stored token untouched. The token is
+2. Open Settings → Plugins → Obsidian vault, press **Set up vault** (or **Change token**), paste the token
+   and press **Save token**. The token state and that one action share a single row; the paste field,
+   **Save token**, **Cancel** and, with a token stored, **Remove token** appear only while editing. The token is
    validated against Obsidian before it is stored, as mode 0600, at
    `$PASEO_HOME/plugin-data/obsidian/token`, and is never shown again by the plugin or the app. It is never put in the host settings document.
-3. Choose a remote vault. Selecting one runs `ob sync-setup`, forces `ob sync-config --mode pull-only
---configs ""`, and starts the watcher.
+3. Saving the first token opens the vault picker. Choosing a vault runs `ob sync-setup`, forces
+   `ob sync-config --mode pull-only --configs ""`, and starts the watcher; the first pull is automatic
+   and shows up as the screen's sync state, not as a step. The **Remote vault** row appears once there
+   is a token to list vaults with or a vault already configured, and offers **Change vault** and
+   **Sync now** beside the selected name.
 
 Sync pulls the vault into `$PASEO_HOME/plugin-data/obsidian/vault`. The CLI's own state stays in
 `$PASEO_HOME/plugin-data/obsidian/config`, so it never touches a separate `ob` login on the same
@@ -44,12 +47,15 @@ machine.
 - The `obsidian` MCP server with `list_vault`, `glob_vault`, `grep_vault` and `read_vault`. Paths are
   vault-relative; `.obsidian/`, `.trash/` and `Trash/` are not readable, and symlinks that leave the
   vault are rejected. Every result carries `lastSyncedAt` and `stale`.
-- A prompt block with the vault's instructions, the text of `.paseo/system.md` (capped at 32 KB) and
-  one index line per `.paseo/skills/*.md` (front-matter `name`, `description`, path). Skill bodies
-  stay in the vault and are read on demand with `read_vault`. A skill file without front matter is
+- A prompt block with the vault's instructions and one index line per `Skills/*.md` at the vault root
+  (front-matter `name`, `description`, path), capped at 32 KB per file. The block also tells the agent
+  that the `Skills` folder is the authority and to list it with `glob_vault "Skills/*.md"`; skill bodies
+  stay in the vault and are read on demand with `read_vault`, and a file without front matter is
   skipped.
 
-Both reach new agents only: the MCP server and the prompt are fixed when an agent is created.
+Both are fixed when an agent is created: the tools read the vault live, so a skill added later is
+readable at once (including after `paseo agent reload`), while its index line appears in the prompt of
+agents created afterwards.
 
 ## Read-only
 
@@ -69,11 +75,11 @@ items instead of an error.
 ## Screen and status
 
 The sidebar row **Obsidian vault** opens a screen with the sync state, the last successful sync, the
-tools agents receive, and a table of the vault's skills: each `.paseo/skills/*.md` file with its
+tools agents receive, and a table of the vault's skills: each `Skills/*.md` file with its
 front-matter name and description, its injection status and its size. It reads the plugin's local
-copy, so a sync error never empties it. Setup lives in settings: the four setup steps as a checklist,
-the token, the `ob` path, the vault choice, **Sync now**, and the same skills as a path, status and
-size table.
+copy, so a sync error never empties it. Setup lives in settings, one row per thing that needs
+configuring: the token, the `ob` path (offered only when discovery fails) and the remote vault, where
+**Change vault** and **Sync now** sit beside the selected name.
 
 `VaultStatus.sync` reports what the CLI holds, read with `ob sync-config --json`: `pull-only` with an
 empty `configs` list is the enforced read-only configuration.
@@ -84,6 +90,8 @@ empty `configs` list is the enforced read-only configuration.
 - No write tools, no push and no read-write switch in this version. Content-hash locking and the mode
   flip are deferred.
 - No semantic search over tags, front matter or the link graph; `[[wikilinks]]` are not resolved.
+- Skills live in the vault's own `Skills` folder. The plugin writes nothing into the vault and needs no
+  hidden directory there; it reads the folder and nothing else.
 - `.obsidian/` is not synced, so the vault's configured trash folder name is unknown: both `.trash/`
   and `Trash/` are refused.
 - An end-to-end encrypted vault cannot be set up: the CLI would need its encryption password and this

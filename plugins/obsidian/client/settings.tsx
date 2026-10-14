@@ -14,7 +14,6 @@ import {
   SettingsInput,
   SettingsRow,
   SettingsSection,
-  SettingsSelect,
 } from "@getpaseo/plugin/client/ui";
 import type { SettingsInputHandle } from "@getpaseo/plugin/client/ui";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -29,22 +28,8 @@ import {
   tokenSetRpc,
 } from "../shared/contracts";
 import { syncNowRpc } from "../shared/contracts";
-import {
-  copy as text,
-  formatBytes,
-  relativeTime,
-  toneFor,
-  useVaultStatus,
-} from "./status";
-import {
-  ActionButton,
-  Body,
-  Headline,
-  Hint,
-  Notice,
-  Status,
-  Table,
-} from "./ui";
+import { copy as text, relativeTime, toneFor, useVaultStatus } from "./status";
+import { ActionButton, Body, Headline, Hint, Notice, Status } from "./ui";
 
 type ReadySettings = Extract<
   SettingsState<typeof settingsSchema>,
@@ -81,6 +66,7 @@ function SettingsEditor({
     id: string;
     name: string;
   } | null>(null);
+  const [pickingVault, setPickingVault] = useState(false);
   const view = status.data;
   const saved = state.values;
   const remoteQuery = useQuery({
@@ -91,7 +77,6 @@ function SettingsEditor({
   const remoteVaults =
     remoteQuery.data?.status === "ok" ? remoteQuery.data.vaults : [];
   const vaultOptions = [
-    { label: text.vaultSelect.placeholder, value: "" },
     ...remoteVaults.map((vault) => ({ label: vault.name, value: vault.id })),
     ...(saved.vaultId &&
     saved.vaultName &&
@@ -104,6 +89,27 @@ function SettingsEditor({
         ]
       : []),
   ];
+  const vaultValue = saved.vaultName
+    ? remoteVaults.some((vault) => vault.id === saved.vaultId)
+      ? saved.vaultName
+      : `${saved.vaultName} (${text.vaultSelect.notFound})`
+    : text.vaultSelect.none;
+  const selectVault = (option: { label: string; value: string }) => {
+    setPickingVault(false);
+    const next = {
+      id: option.value,
+      name: option.label.replace(/ \(.*\)$/, ""),
+    };
+    if (saved.vaultId && saved.vaultId !== option.value) {
+      setPendingVault(next);
+      return;
+    }
+    apply({
+      ...saved,
+      vaultId: option.value,
+      vaultName: next.name,
+    }).catch(console.error);
+  };
   const apply = async (values: Settings) => {
     const ok = await state.save(values, state.revision);
     if (ok) toast.show(text.settingsSaved);
@@ -123,6 +129,7 @@ function SettingsEditor({
         tokenField.current?.replaceText("");
         setTokenDraft("");
         setEditingToken(false);
+        if (saved.vaultId === null) setPickingVault(true);
         toast.show(text.toasts.tokenSaved(result.account));
       } else if (result.status === "rejected") {
         toast.error(text.toasts.tokenRejected);
@@ -151,7 +158,7 @@ function SettingsEditor({
       if (result.status === "started") toast.show(text.toasts.syncStarted);
       else if (result.status === "already_pulling")
         toast.show(text.toasts.syncBusy);
-      else toast.error(text.errors.ob_missing.body);
+      else toast.show(text.toasts.syncUnconfigured);
       await invalidate();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : String(error));
@@ -161,7 +168,6 @@ function SettingsEditor({
     if (editingToken) tokenField.current?.focus();
   }, [editingToken]);
   const banner = view?.error ? text.errors[view.error.code] : null;
-  const instructions = view?.injection;
 
   return (
     <ScrollView
@@ -214,36 +220,34 @@ function SettingsEditor({
         ) : null}
       </View>
 
-      {view?.state === "unconfigured" ? (
-        <SettingsSection title={text.setupHeading}>
-          <SettingsCard>
-            {text
-              .checklist(
-                view.token.stored,
-                view.ob.path !== null,
-                view.vault !== null,
-                view.lastSuccessAt != null,
-              )
-              .map((row) => (
-                <SettingsRow key={row.label} label={row.label}>
-                  <Body theme={theme} muted={!row.done}>
-                    {row.done ? text.done : text.todo}
-                  </Body>
-                </SettingsRow>
-              ))}
-          </SettingsCard>
-        </SettingsSection>
-      ) : null}
-
       <SettingsSection title={text.sections.connection}>
         <SettingsCard>
           <SettingsRow label={text.token.label}>
-            <Body theme={theme} muted>
-              {describeTokenState(
-                view?.token.stored ?? false,
-                view?.token.account ?? null,
-              )}
-            </Body>
+            <View
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                gap: 8,
+                flexWrap: "wrap",
+              }}
+            >
+              <Body theme={theme} muted>
+                {describeTokenState(
+                  view?.token.stored ?? false,
+                  view?.token.account ?? null,
+                )}
+              </Body>
+              <ActionButton
+                theme={theme}
+                layout={layout}
+                variant={view?.token.stored ? "secondary" : "primary"}
+                label={view?.token.stored ? text.changeToken : text.addToken}
+                disabled={status.isLoading}
+                onPress={() => {
+                  setEditingToken(true);
+                }}
+              />
+            </View>
           </SettingsRow>
           {editingToken ? (
             <>
@@ -256,7 +260,9 @@ function SettingsEditor({
                 onChangeText={setTokenDraft}
               />
               <SettingsRow label="">
-                <View style={{ flexDirection: "row", gap: 8 }}>
+                <View
+                  style={{ flexDirection: "row", gap: 8, flexWrap: "wrap" }}
+                >
                   <ActionButton
                     theme={theme}
                     layout={layout}
@@ -279,35 +285,22 @@ function SettingsEditor({
                       setEditingToken(false);
                     }}
                   />
+                  {view?.token.stored ? (
+                    <ActionButton
+                      theme={theme}
+                      layout={layout}
+                      variant="ghost"
+                      label={text.removeToken}
+                      disabled={savingToken}
+                      onPress={() => {
+                        setConfirmingRemove(true);
+                      }}
+                    />
+                  ) : null}
                 </View>
               </SettingsRow>
             </>
-          ) : (
-            <SettingsRow label="">
-              <View style={{ flexDirection: "row", gap: 8 }}>
-                <ActionButton
-                  theme={theme}
-                  layout={layout}
-                  variant={view?.token.stored ? "secondary" : "primary"}
-                  label={view?.token.stored ? text.replaceToken : text.addToken}
-                  onPress={() => {
-                    setEditingToken(true);
-                  }}
-                />
-                {view?.token.stored ? (
-                  <ActionButton
-                    theme={theme}
-                    layout={layout}
-                    variant="ghost"
-                    label={text.removeToken}
-                    onPress={() => {
-                      setConfirmingRemove(true);
-                    }}
-                  />
-                ) : null}
-              </View>
-            </SettingsRow>
-          )}
+          ) : null}
         </SettingsCard>
       </SettingsSection>
 
@@ -350,89 +343,102 @@ function SettingsEditor({
         </SettingsCard>
       </SettingsSection>
 
-      <SettingsSection title={text.sections.vault}>
-        <SettingsCard>
-          <SettingsSelect
-            label={text.vaultSelect.label}
-            value={saved.vaultId ?? ""}
-            disabled={!view?.token.stored}
-            options={vaultOptions}
-            onValueChange={(value) => {
-              const vault = vaultOptions.find(
-                (option) => option.value === value,
-              );
-              if (!vault) return;
-              const next = {
-                id: value,
-                name: vault.label.replace(/ \(.*\)$/, ""),
-              };
-              if (saved.vaultId && saved.vaultId !== value) {
-                setPendingVault(next);
-                return;
-              }
-              apply({
-                ...saved,
-                vaultId: value || null,
-                vaultName: value ? next.name : null,
-              }).catch(console.error);
-            }}
-          />
-          <SettingsAction
-            label=""
-            actionLabel={text.syncNow}
-            disabled={!view?.vault || view.pulling}
-            onPress={() => {
-              startSync().catch(console.error);
-            }}
-          />
-        </SettingsCard>
-      </SettingsSection>
-
-      <SettingsSection title={text.sections.instructions}>
-        <SettingsCard>
-          {instructions ? (
-            <View style={{ gap: 6 }}>
-              <Table
-                theme={theme}
-                layout={layout}
-                columns={[
-                  {
-                    key: "path",
-                    label: text.skillColumns.path,
-                    flex: 3,
-                    kind: "mono",
-                  },
-                  {
-                    key: "status",
-                    label: text.skillColumns.status,
-                    width: 140,
-                  },
-                  {
-                    key: "size",
-                    label: text.skillColumns.size,
-                    width: 80,
-                    align: "right",
-                    kind: "mono",
-                  },
-                ]}
-                rows={instructions.skills.map((skill) => ({
-                  key: skill.path,
-                  cells: [
-                    skill.path,
-                    describeInjection(skill.status),
-                    formatBytes(skill.bytes),
-                  ],
-                }))}
-              />
-              {instructions.skills.length === 0 ? (
-                <Hint theme={theme}>{text.skillsNone}</Hint>
-              ) : null}
-            </View>
-          ) : (
-            <Hint theme={theme}>{text.settingsLoading}</Hint>
-          )}
-        </SettingsCard>
-      </SettingsSection>
+      {saved.vaultId !== null || view?.token.stored === true ? (
+        <SettingsSection title={text.sections.vault}>
+          <SettingsCard>
+            <SettingsRow label={text.vaultSelect.label}>
+              <View
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  gap: 8,
+                  flexWrap: "wrap",
+                }}
+              >
+                <Body theme={theme} muted>
+                  {vaultValue}
+                </Body>
+                <ActionButton
+                  theme={theme}
+                  layout={layout}
+                  variant="secondary"
+                  label={
+                    saved.vaultId
+                      ? text.vaultSelect.change
+                      : text.vaultSelect.choose
+                  }
+                  disabled={status.isLoading}
+                  onPress={() => {
+                    setPickingVault(true);
+                  }}
+                />
+                {saved.vaultId ? (
+                  <ActionButton
+                    theme={theme}
+                    layout={layout}
+                    variant="secondary"
+                    label={text.syncNow}
+                    disabled={Boolean(view?.pulling)}
+                    onPress={() => {
+                      startSync().catch(console.error);
+                    }}
+                  />
+                ) : null}
+              </View>
+            </SettingsRow>
+            <Modal
+              title={text.vaultSelect.label}
+              open={pickingVault}
+              onOpenChange={setPickingVault}
+            >
+              <Modal.Content>
+                <View style={{ gap: 8 }}>
+                  {remoteQuery.isPending ? (
+                    <Hint theme={theme}>{text.loadingVaults}</Hint>
+                  ) : null}
+                  {remoteQuery.data?.status === "error" ? (
+                    <Hint theme={theme}>
+                      {text.errors[remoteQuery.data.code].title}
+                    </Hint>
+                  ) : null}
+                  {remoteQuery.data?.status === "token_missing" ? (
+                    <Hint theme={theme}>{text.token.none}</Hint>
+                  ) : null}
+                  {remoteQuery.data?.status === "ok" &&
+                  remoteQuery.data.vaults.length === 0 ? (
+                    <Hint theme={theme}>{text.noRemoteVaults}</Hint>
+                  ) : null}
+                  {vaultOptions.map((option) => (
+                    <ActionButton
+                      key={option.value}
+                      theme={theme}
+                      layout={layout}
+                      variant={
+                        option.value === (saved.vaultId ?? "")
+                          ? "primary"
+                          : "secondary"
+                      }
+                      label={option.label}
+                      onPress={() => {
+                        selectVault(option);
+                      }}
+                    />
+                  ))}
+                  <ActionButton
+                    theme={theme}
+                    layout={layout}
+                    variant="ghost"
+                    label={text.confirm.cancel}
+                    onPress={() => {
+                      setPickingVault(false);
+                    }}
+                  />
+                </View>
+              </Modal.Content>
+            </Modal>
+          </SettingsCard>
+        </SettingsSection>
+      ) : null}
 
       <Modal
         title={text.confirm.removeTitle}
@@ -513,14 +519,6 @@ function SettingsEditor({
       </Modal>
     </ScrollView>
   );
-}
-
-function describeInjection(
-  status: "injected" | "not_injected" | "truncated",
-): string {
-  if (status === "injected") return text.status.injected;
-  if (status === "truncated") return text.status.truncated;
-  return text.status.skipped;
 }
 
 export function SettingsScreen(props: PluginSurfaceProps) {

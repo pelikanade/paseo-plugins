@@ -4,14 +4,12 @@ import type { InjectionFile } from "../shared/contracts";
 import { readVault } from "./vault";
 
 export const INJECTION_BYTES_LIMIT = 32 * 1024;
-export const SYSTEM_FILE = ".paseo/system.md";
-export const SKILLS_DIRECTORY = ".paseo/skills";
+export const SKILLS_DIRECTORY = "Skills";
 
 export const INJECTION_INSTRUCTIONS =
-  "The Obsidian vault reached through the obsidian MCP server is read-only: list_vault, glob_vault, grep_vault and read_vault. Use read_vault to open a note before relying on it, and prefer grep_vault to find the right note. Every result carries lastSyncedAt and stale; when stale is true the local copy may be behind the remote. Paths are vault-relative, and .obsidian and the trash folders are not readable.";
+  'The Obsidian vault reached through the obsidian MCP server is read-only: list_vault, glob_vault, grep_vault and read_vault. Its skills are Markdown files in the vault\'s Skills folder, each with name and description front matter: list them with glob_vault "Skills/*.md" and read a skill with read_vault before using it. Use read_vault to open a note before relying on it, and prefer grep_vault to find the right note. Every result carries lastSyncedAt and stale; when stale is true the local copy may be behind the remote. Paths are vault-relative, and .obsidian and the trash folders are not readable.';
 
 export interface InjectionState {
-  systemPrompt: InjectionFile;
   skills: InjectionFile[];
   block: string;
 }
@@ -83,7 +81,6 @@ export class Injection {
   }
 
   private async build(): Promise<InjectionState> {
-    const system = await this.file(SYSTEM_FILE);
     const names = (
       await readdir(join(this.root, SKILLS_DIRECTORY)).catch(() => [])
     )
@@ -107,7 +104,6 @@ export class Injection {
         );
     }
     const sections = [this.header()];
-    if (system.text !== null) sections.push(system.text);
     if (lines.length > 0) sections.push(`Vault skills:\n${lines.join("\n")}`);
     const strip = (file: InjectionFileText): InjectionFile => ({
       path: file.path,
@@ -118,7 +114,6 @@ export class Injection {
       description: file.description,
     });
     return {
-      systemPrompt: strip(system),
       skills: skills.map(strip),
       block: sections.join("\n\n"),
     };
