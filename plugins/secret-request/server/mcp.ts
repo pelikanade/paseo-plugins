@@ -131,7 +131,8 @@ export class Gateway {
         content: [
           {
             type: "text",
-            text: `Secret handover is unavailable on this host, so no card was shown: ${result.message ?? "unknown reason"}`,
+            text:
+              result.message ?? "Secret handover is unavailable on this host",
           },
         ],
         isError: true,

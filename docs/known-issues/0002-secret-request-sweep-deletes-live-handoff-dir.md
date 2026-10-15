@@ -1,6 +1,6 @@
 # secret-request: a second instance's sweep deletes a live daemon's handoff directory
 
-Status: root-caused and reproduced. Fix proposed, not applied. The live host's handover is still pointed at a directory any `pnpm test:e2e` run can delete again.
+Status: fixed on branch `secret-handover-report`. The sweep now keeps a live instance's own directory fresh, a delivery recreates a directory that disappeared anyway, and the tool result no longer claims that no card was shown when one was.
 
 ## Symptom
 
@@ -84,22 +84,27 @@ Both assertions in the script were equality checks against the incident's string
 - **"Each call creates a new empty directory."** No code path creates a directory per call: `prepareHandoff` runs once per plugin start (`requests.ts:79`) and `writeValue` only opens a file. The fresh directories belong to other instances, as the plugin-start timestamps in `daemon.log` show.
 - **The 16:10:12 daemon restart as the cause.** The failures predate it by six minutes, and the restart _masked_ them by re-running `prepareHandoff`, which re-created the missing directory. The plugin keeps no handover state that survives a restart: `Requests.entries` is in memory only, `state.json` holds `{version, port, handoffId, sessions}` (no values, no per-request records), and `/var/lib/paseo/.paseo/agent-requests/*.json` is the daemon's own request queue (`{fingerprint, agentId, state}`), not plugin state.
 
-## Proposed fix
+## Fix
 
-1. Make the directory rule mean what it says. The owner should refresh its own scope directory's mtime on the existing 60 s sweep tick (`utimes(root, now, now)` in `requests.ts:100` `sweep`), so a peer only ever removes a directory that has been idle past the deadline _because its owner stopped_. `sweepScope` then stays as it is.
-2. Also make the writer self-healing, so any future loss of the directory costs nothing: re-run `privateDirectory` (and the `statfs` check) on `handoff.root` before the `open` in `writeValue`, or at the top of `requests.ts:243` `request`, and re-create it if it is gone. The `0600`/uid checks on the value file stay.
-3. Stop the E2E suite from touching a live daemon's base: run its daemon with a private `/dev/shm` (`unshare -m` plus a tmpfs, the machinery `secret-request.e2e.mjs:542` already uses for one scenario) and have the planted-directory scenario clean up after itself. This is hygiene, not the root cause: two instances on one host remain legal, and the plugin's README claims they never delete each other's live handoffs.
-4. Log directory removals (`sweepScope` should report them the way it reports files) so this failure is visible next time.
-5. Reword `mcp.ts:134`: `so no card was shown` is wrong when the message came from a submit failure, and it sent this investigation after a card-rendering bug that does not exist.
+Liveness, not idle time, decides whether a scope directory is a leftover (`plugins/secret-request/server/handoff.ts`, `server/requests.ts`, `server/mcp.ts`):
 
-Verification for the fix: an E2E scenario starting a second daemon next to a live one, ageing the live daemon's scope directory past the deadline, then asserting the peer's start leaves it alone _and_ that a submit through the live daemon still returns `delivered` — with the existing `an expired handoff left by an earlier lifetime is swept while a live one is kept` scenario kept green for a genuinely dead lifetime.
+1. `handoff.ts` gained `refreshScope(uid, root)`: it revalidates the base and the scope directory by the same rules as startup (`lstat`: real directory, our uid, `0700`, not a symlink; `statfs`: `TMPFS_MAGIC`), creates the directory when it is gone, and touches its mtime. `requests.ts` calls it on the minute tick (`maintain`) and once at plugin start, so a running instance's directory is never more than a minute old and no peer can sweep it. The tick still removes foreign directories, but idle past the deadline now means the owner stopped.
+2. `writeValue` calls `refreshScope` before opening the value file, so a directory that disappears inside that minute — or a host where the heartbeat itself died — costs a `console.warn` instead of a failed handover, and the recreated directory passes the same private-directory and tmpfs checks as at startup. `prepareHandoff` and `writeValue` now share one validation helper (`privateScopes`).
+3. `sweepScope` reports the directories it removes as well as the files, and the tick logs both: a deletion under a live daemon is no longer silent.
+4. `mcp.ts` returns the result message as it stands instead of prefixing `so no card was shown` to every `unavailable` status; the no-card sentence now lives in the one place that knows it (`request()` failing to prepare, `requests.ts`), so a submit failure reads as `The value could not be handed over: ENOENT …` with no false claim about the card.
+
+Deliberately not done: isolating `/dev/shm` in `e2e/support/runtime.mjs`. With the heartbeat, a shared base is safe — the suite's daemons can no longer touch a live instance's directory — and a private tmpfs per daemon is not worth the namespace machinery the one existing scenario already needs.
+
+## Verification
+
+`e2e/secret-request.e2e.mjs` gained `a live instance keeps its handoff directory fresh and repairs one that disappears`, which waits out the minute tick and asserts that the live directory's mtime advances with no handover, that a second daemon starting next to it removes an aged sibling directory while leaving the live one alone, and that a delivery still returns `delivered` — then deletes the live directory and asserts the next submit returns `delivered` with the value file inside a recreated `0700` directory. The existing `an expired handoff left by an earlier lifetime is swept while a live one is kept` scenario stays green for a genuinely dead lifetime.
 
 ## Unverified
 
 - Which run deleted the live directory. The removal is silent and peer daemons' logs live in temp homes that `runtime.mjs` deletes at teardown. The attribution to the E2E suite is circumstantial: six fresh instance directories against two plugin starts in `daemon.log`, sibling worktrees with installed dependencies and live harness leftovers (`/tmp/paseo-plugin-e2e-*`, `/tmp/capture-activity.mjs`), and the repo's own rule that the suite is the only behavior test.
 - When it was first deleted: anywhere between the owning worker's start (2026-10-14T12:29:46Z) and the first failed submit (2026-10-15T08:04:00Z).
 - How the user answered four cards within 1–5 s of each call (08:04:00, 08:04:46, 08:04:58, 08:07:34). That the submits happened follows from the plugin source; the client-side input behaviour that made them fast is outside this repository and was not inspected.
-- The four handoff files still in the live scope were not read, and the live host was not restarted or reconfigured. The directory becomes deletable again roughly 15 minutes after the last handoff file expires (about 16:50 +08:00 on 2026-10-15), so the next `pnpm test:e2e` run on this host can break the next handover again.
+- The four handoff files still in the live scope were not read, and the live host was not restarted or reconfigured. Before the fix, that directory became deletable again roughly 15 minutes after the last handoff file expired; the running daemon still uses the code from before this branch, so a peer sweeping it today would still remove it, and a daemon or plugin restart is needed before the fix applies to that host.
 
 ## Related
 

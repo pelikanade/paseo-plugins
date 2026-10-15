@@ -17,6 +17,7 @@ import {
 import {
   deleteValue,
   prepareHandoff,
+  refreshScope,
   sweepExpired,
   writeValue,
 } from "./handoff";
@@ -72,6 +73,7 @@ export class Requests {
   private readonly uid =
     typeof process.getuid === "function" ? process.getuid() : 0;
   private handoff: Promise<Handoff> | undefined;
+  private root: string | undefined;
   private sweeper: NodeJS.Timeout | undefined;
 
   constructor(private readonly scope: () => Promise<string>) {}
@@ -84,11 +86,12 @@ export class Requests {
         console.warn(`secret-request: ${prepared.message}`);
         return prepared;
       }
+      this.root = prepared.root;
       this.sweeper = setInterval(() => {
-        this.sweep(scope).catch(console.error);
+        this.maintain().catch(console.error);
       }, SWEEP_INTERVAL_MS);
       this.sweeper.unref();
-      await this.sweep(scope);
+      await this.maintain();
       return prepared;
     })().catch((error: unknown): Handoff => ({
       status: "unavailable",
@@ -97,12 +100,21 @@ export class Requests {
     return this.handoff;
   }
 
-  private async sweep(scope: string): Promise<void> {
+  private async maintain(): Promise<void> {
+    const root = this.root;
+    if (root === undefined) return;
     try {
-      const { removed, failed, reason } = await sweepExpired(this.uid, scope);
-      if (removed > 0)
+      if (await refreshScope(this.uid, root))
         console.warn(
-          `secret-request: swept ${String(removed)} expired handoff file(s) left by earlier daemon lifetimes`,
+          `secret-request: the handoff directory ${root} had disappeared and was recreated`,
+        );
+      const { files, directories, failed, reason } = await sweepExpired(
+        this.uid,
+        root,
+      );
+      if (files > 0 || directories > 0)
+        console.warn(
+          `secret-request: swept ${String(files)} expired handoff file(s) and removed ${String(directories)} abandoned handoff director(ies) left by earlier daemon lifetimes`,
         );
       if (failed > 0)
         console.warn(
@@ -254,7 +266,7 @@ export class Requests {
         label: input.label,
         path: null,
         handoffExpiresAt: null,
-        message: handoff.message,
+        message: `No card was shown: ${handoff.message}`,
       };
     const pendingId = this.pendingByAgent.get(agentId);
     const pending =
