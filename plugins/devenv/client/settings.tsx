@@ -22,6 +22,11 @@ const fields: { key: keyof Settings; label: string; numeric: boolean }[] = [
     numeric: true,
   },
   { key: "maxRoots", label: "Cached projects", numeric: true },
+  {
+    key: "mcpIdleMs",
+    label: "devenv MCP idle timeout before it stops (ms, 0 keeps it running)",
+    numeric: true,
+  },
   { key: "maxCaptureBytes", label: "Maximum captured bytes", numeric: true },
   {
     key: "runtimeDir",

@@ -8,6 +8,7 @@ export const settingsSchema = z.object({
   failureRetryMs: z.number().int().nonnegative().default(60000),
   runtimeDir: z.string().default(""),
   maxRoots: z.number().int().positive().default(8),
+  mcpIdleMs: z.number().int().nonnegative().default(300000),
   maxCaptureBytes: z.number().int().positive().default(8388608),
 });
 export type Settings = z.infer<typeof settingsSchema>;

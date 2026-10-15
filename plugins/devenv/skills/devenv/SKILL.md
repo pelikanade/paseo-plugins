@@ -23,7 +23,7 @@ Run `devenv init` only when the project has no `devenv.nix`, and preserve the pr
 - `tasks."name:exec" = { ... };` and `processes` for repeatable and long-running work;
 - `enterShell` only for what declarative options cannot express, kept short.
 
-Search before adding anything so option names and attribute paths are exact. When this session has the `devenv` MCP server, use its `search_packages` and `search_options` tools rather than guessing or shelling out; they query the project's pinned inputs. That server runs `devenv mcp` in the project root and refuses an untrusted project, so fall back to `devenv search <term>` when the tools are absent, and trust what the installed devenv version reports over remembered option names.
+Search before adding anything so option names and attribute paths are exact. When this session has the `devenv` MCP server, use its `search_packages` and `search_options` tools rather than guessing or shelling out; they query the project's pinned inputs. That server starts `devenv mcp` in the project root on the first tool call and stops it again once it has been idle, and it refuses an untrusted project. The first search returns only after the package and option caches are ready and can take about twenty seconds; waiting is expected, and an empty answer after that just means nothing matched. Fall back to `devenv search <term>` when the tools are absent, and trust what the installed devenv version reports over remembered option names.
 
 ## Keep inputs pinned
 
@@ -33,7 +33,7 @@ Search before adding anything so option names and attribute paths are exact. Whe
 
 - `devenv tasks list`, then `devenv tasks run <task>`; add `--mode single` to skip dependencies.
 - `devenv test` runs the `enterTest` checks.
-- When the `devenv` MCP server is available, drive services and processes through its tools — `list_processes`, `get_process_status`, `get_process_logs`, `start_process`, `stop_process`, `restart_process` — instead of reaching for `devenv up` or `devenv processes` by hand.
+- When the `devenv` MCP server is available, drive services and processes through its tools — `list_processes`, `get_process_status`, `get_process_logs`, `start_process`, `stop_process`, `restart_process` — instead of reaching for `devenv up` or `devenv processes` by hand. These tools work as soon as the server is reached; the server itself starts on the first call and stops again after it has been idle.
 - Run foreground supervisors such as `devenv up` as managed background work with cleanup when done; a declared service needs a running supervisor before a test that expects it can pass.
 - Once the environment is active, the project's own commands are the fastest verification: build, lint and test directly.
 

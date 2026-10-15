@@ -52,7 +52,15 @@ pnpm exec paseo plugin reload devenv
 
 新 worktree 的环境仍在自身项目根目录求值并独立缓存，MCP 使用相同的信任规则。已信任主仓库的新 worktree 可在第一次会话打开时准备并应用环境，无须重复授权；构建超过 25 秒预算时仍需等待完成后重载代理。
 
-环境在会话层生效。代理切换命令 cwd 后仍使用同一会话环境；另一项目应使用另一代理。新代理保留已有 `systemPrompt`，依次追加插件说明和随包捆绑的 devenv 技能（`skills/devenv/SKILL.md`，经 `server/skill.generated.ts` 内联），并获得信任检查后的 `devenv mcp` 启动配置。已有同名 MCP 配置优先。Paseo 0.11.2 没有插件技能挂载接口，因此技能内容通过代理提示交付而非 `skill://`；`verify/skill.mjs` 保证交付文本与随包文件逐字节一致。MCP 配置在创建时交付；已有代理重载仍能获得环境。
+环境在会话层生效。代理切换命令 cwd 后仍使用同一会话环境；另一项目应使用另一代理。新代理保留已有 `systemPrompt`，依次追加插件说明和随包捆绑的 devenv 技能（`skills/devenv/SKILL.md`，经 `server/skill.generated.ts` 内联），并获得信任检查后的轻量 `devenv` MCP 前端配置。已有同名 MCP 配置优先。Paseo 0.11.2 没有插件技能挂载接口，因此技能内容通过代理提示交付而非 `skill://`；`verify/skill.mjs` 保证交付文本与随包文件逐字节一致。MCP 配置在创建时交付；已有代理重载仍能获得环境。
+
+## devenv MCP
+
+`devenv mcp` 会为每个进程保留约 4 GiB 的 Nix 求值内存，因此插件不再让每个会话直接启动它。会话拿到的是一个自带工具清单的 stdio 前端：`initialize` 与 `tools/list` 立即返回，只有第一次 `tools/call` 才在项目根目录启动 `devenv mcp`。
+
+工具清单由 `agent.create` 时的一次探测获得，按 `devenvBin` 在插件进程内缓存（探测进程在包与选项缓存开始求值前退出，中途失败按 `failureRetryMs` 重试）。`search_options` 与 `search_packages` 依赖这份缓存：进程启动后缓存尚未就绪时，前端重试该调用最长 30 秒，因此首次搜索会明显变慢，但不会返回空结果。进程类工具（`list_processes`、`get_process_status`、`get_process_logs`、`start_process`、`stop_process`、`restart_process`）不等待缓存。
+
+上游进程由前端独占：空闲超过 `mcpIdleMs`（0 表示不因空闲终止），或客户端关闭 stdio、前端收到 `SIGTERM`/`SIGINT` 时终止，先 `SIGTERM`，1 秒后 `SIGKILL`（devenv 2.1.2 忽略 `SIGTERM`）。同一 worktree 的多个会话各自持有自己的上游进程，插件不跨会话共享 `devenv mcp`；只有真正调用 devenv 工具的会话才支付求值内存，未调用时不产生进程。信任在每次启动上游时重新检查，因此撤销信任会使新的调用失败，而不再像以前那样继续使用已经启动的进程。未授权项目不探测工具清单，前端以退出码 1 结束，与直接启动 `devenv mcp` 的表现一致。
 
 ## 设置和 RPC
 
@@ -65,6 +73,7 @@ Settings → devenv 提供以下宿主设置，修改后缓存失效：
 | `loadTimeoutMs`   | `120000`                                          |
 | `failureRetryMs`  | `60000`                                           |
 | `maxRoots`        | `8`                                               |
+| `mcpIdleMs`       | `300000`（devenv MCP 空闲终止时间；0 表示不终止） |
 | `maxCaptureBytes` | `8388608`                                         |
 | `runtimeDir`      | 空字符串，保留宿主的 `XDG_RUNTIME_DIR`            |
 
@@ -80,4 +89,4 @@ pnpm --filter @pelikanade/paseo-plugin-devenv exec npm pack --dry-run
 
 行为测试全部使用 E2E：启动隔离的真实 Paseo daemon，通过真实 Web UI、RPC、devenv/Nix 和 OpenCode 进程验证插件。测试需要 Linux、Nix、devenv、Bash、OpenCode 和 Chromium，不再提供单元测试或可选真实测试开关；缺少依赖会失败。测试不发送模型请求，项目、provider 数据与信任目录均为临时目录。失败日志、浏览器截图和 trace 保存在仓库的 `test-results/`。冷构建可能需要数分钟。详见 [E2E skill](../../skills/paseo-plugin-e2e/SKILL.md)。Bend 仅用于开发和静态验证，Paseo 安装时直接编译包含已提交模型产物的插件源码，无须 Bend。
 
-[验证说明](verify/README.md) 区分 Bend2 原生证明、产物检查与真实 E2E；[来源](PROVENANCE.md) 记录参考实现和移植差异。真实 E2E 断言随包技能存在，并断言交付给项目代理的 `systemPrompt` 与 `skills/devenv/SKILL.md` 逐字节一致，且 `devenv` MCP 启动配置指向该项目。
+[验证说明](verify/README.md) 区分 Bend2 原生证明、产物检查与真实 E2E；[来源](PROVENANCE.md) 记录参考实现和移植差异。真实 E2E 断言随包技能存在，断言交付给项目代理的 `systemPrompt` 与 `skills/devenv/SKILL.md` 逐字节一致，`devenv` MCP 启动配置指向该项目，并断言 MCP 前端在首次工具调用前不启动 `devenv mcp`、调用后启动、空闲与会话结束时都会终止它。

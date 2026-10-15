@@ -1,7 +1,8 @@
 import type { PluginServerContext } from "@getpaseo/plugin/server";
+import { McpCatalogs } from "./server/catalog";
 import { Environments } from "./server/environment";
 import { TrustReloads } from "./server/reload";
-import { findRoot } from "./server/project";
+import { findRoot, isTrusted, trustPath } from "./server/project";
 import { instructions } from "./server/instructions";
 import { mcpConfig } from "./server/mcp";
 import { skill } from "./server/skill.generated";
@@ -17,11 +18,13 @@ export default function contribute(server: PluginServerContext) {
   let settings = settingsSchema.parse({});
   const environments = new Environments(settings);
   const reloads = new TrustReloads(environments, () => settings);
+  const catalogs = new McpCatalogs();
   const registered = server.registerSettings(settingsDefinition);
   const configure = (state: Awaited<ReturnType<typeof registered.read>>) => {
     if (state.status === "ready") {
       settings = state.values;
       environments.configure(settings);
+      catalogs.configure(settings);
     } else console.warn(`devenv settings invalid: ${state.error}`);
   };
   const ready = registered.read().then(configure).catch(console.error);
@@ -31,6 +34,9 @@ export default function contribute(server: PluginServerContext) {
       await ready;
       const root = findRoot(request.config.cwd);
       if (root === null) return request;
+      const catalog = isTrusted(root, trustPath())
+        ? await catalogs.read(settings.devenvBin, root)
+        : "";
       return {
         ...request,
         config: {
@@ -39,7 +45,12 @@ export default function contribute(server: PluginServerContext) {
             .filter(Boolean)
             .join("\n\n"),
           mcpServers: {
-            devenv: mcpConfig(root, settings.devenvBin),
+            devenv: mcpConfig(
+              root,
+              settings.devenvBin,
+              catalog,
+              settings.mcpIdleMs,
+            ),
             ...request.config.mcpServers,
           },
         },
@@ -99,6 +110,7 @@ export default function contribute(server: PluginServerContext) {
   return () => {
     shutdown ??= (async () => {
       for (const cleanup of cleanups) await cleanup();
+      catalogs.close();
       await Promise.all([reloads.close(), environments.close()]);
     })();
     return shutdown;
