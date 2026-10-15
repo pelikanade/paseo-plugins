@@ -1,3 +1,4 @@
+import { settingsRpc } from "@getpaseo/plugin";
 import type {
   PluginSurfaceProps,
   SettingsState,
@@ -44,6 +45,8 @@ type ReadySettings = Extract<
   { status: "ready" }
 >;
 
+const settingsWrite = settingsRpc(settingsDefinition.id).write;
+
 function describeTokenState(stored: boolean, account: string | null): string {
   if (!stored) return text.token.none;
   return account ? text.token.stored(account) : text.token.storedNoAccount;
@@ -64,6 +67,7 @@ function SettingsEditor({
   const clearToken = useRpc(tokenClearRpc);
   const syncNow = useRpc(syncNowRpc);
   const remotes = useRpc(remotesRpc);
+  const writeSettings = useRpc(settingsWrite);
   const tokenField = useRef<SettingsInputHandle | null>(null);
   const [tokenDraft, setTokenDraft] = useState("");
   const [obPathDraft, setObPathDraft] = useState(state.values.obPath);
@@ -119,10 +123,21 @@ function SettingsEditor({
     }).catch(console.error);
   };
   const apply = async (values: Settings) => {
-    const ok = await state.save(values, state.revision);
-    if (ok) toast.show(text.settingsSaved);
-    else
-      toast.error(text.settingsSaveError(state.saveError ?? "unknown error"));
+    try {
+      const result = await writeSettings({
+        revision: state.revision,
+        values,
+      });
+      if (result.status === "saved") toast.show(text.settingsSaved);
+      else toast.error(text.settingsSaveError(result.error));
+    } catch (error) {
+      toast.error(
+        text.settingsSaveError(
+          error instanceof Error ? error.message : String(error),
+        ),
+      );
+    }
+    await state.reload();
   };
   const invalidate = async () => {
     await queries.invalidateQueries({ queryKey: ["obsidian"] });
@@ -142,7 +157,9 @@ function SettingsEditor({
       } else if (result.status === "rejected") {
         toast.error(text.toasts.tokenRejected);
       } else {
-        toast.error(text.errors[result.code].body);
+        toast.error(
+          text.toasts.tokenUnverified(text.errors[result.code].title),
+        );
       }
       await invalidate();
     } catch (error) {

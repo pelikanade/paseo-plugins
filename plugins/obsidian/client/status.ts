@@ -146,6 +146,7 @@ export const copy = {
     tokenSaved: (account: string | null) =>
       account ? `Token saved for ${account}.` : "Token saved.",
     tokenRejected: "Token rejected. Nothing was saved.",
+    tokenUnverified: (reason: string) => `${reason}. Nothing was saved.`,
     syncStarted: "Sync started.",
     syncBusy: "Sync is already running.",
     syncUnconfigured: "Add a token and choose a vault first.",

@@ -34,14 +34,16 @@ const persistedAgent = async (home, id) => {
   return null;
 };
 
-const syncProcesses = async () => {
+const syncProcesses = async (home) => {
+  const vault = join(home, "plugin-data", "obsidian", "vault");
   const found = [];
   for (const pid of (await readdir("/proc")).filter((name) =>
     /^\d+$/.test(name),
   )) {
     try {
       const command = await readFile(`/proc/${pid}/cmdline`, "utf8");
-      if (command.includes("--continuous")) found.push({ pid, command });
+      if (command.includes("--continuous") && command.includes(vault))
+        found.push({ pid, command });
     } catch (error) {
       if (!["ENOENT", "ESRCH", "EACCES"].includes(error.code)) throw error;
     }
@@ -157,7 +159,7 @@ test(
         assert.equal(view.lastSuccessAt, null);
         assert.equal(view.staleAfterSeconds, 900);
         assert.deepEqual(view.injection, { skills: [] });
-        assert.deepEqual(await syncProcesses(), []);
+        assert.deepEqual(await syncProcesses(f.home), []);
         assert.deepEqual(
           await f.rpc("obsidian", "obsidian.vault.search", { query: "note" }),
           { items: [] },
@@ -468,14 +470,14 @@ test(
         );
         assert.equal(broken.state, "unconfigured");
         assert.equal(broken.ob.version, null);
-        assert.deepEqual(await syncProcesses(), []);
+        assert.deepEqual(await syncProcesses(f.home), []);
         await writeSettings({ obPath: "" });
         const recovered = await until(
           status,
           (value) => value.ob.path !== null && value.ob.version === "0.0.14",
         );
         assert.equal(recovered.ob.source, "path");
-        assert.deepEqual(await syncProcesses(), []);
+        assert.deepEqual(await syncProcesses(f.home), []);
         assert.equal(
           (await f.rpc("obsidian", "obsidian.remotes", {})).status,
           "token_missing",
@@ -620,23 +622,31 @@ test(
         await expect(page.getByPlaceholder("Path or name of ob")).toHaveCount(
           0,
         );
+        const obPath = (await status()).ob.path;
+        assert.ok(obPath, "the daemon resolves ob");
         await writeSettings({ obPath: "/nonexistent/ob" });
         await until(
           status,
           (value) => value.ob.source === null && value.ob.path === null,
         );
-        await expect(page.getByPlaceholder("Path or name of ob")).toBeVisible({
-          timeout: 20000,
-        });
+        const obPathField = page.getByPlaceholder("Path or name of ob");
+        await expect(obPathField).toBeVisible({ timeout: 20000 });
+        await obPathField.fill(obPath);
+        await page.getByRole("button", { name: "Save ob path" }).click();
+        await expect(
+          page.getByText("Settings saved.", { exact: true }),
+        ).toBeVisible({ timeout: 20000 });
+        await until(
+          status,
+          (value) => value.ob.source === "override" && value.ob.path === obPath,
+        );
+        await expect(obPathField).toBeVisible();
         await writeSettings({ obPath: "" });
         await until(
           status,
           (value) => value.ob.source === "path" && value.ob.path !== null,
         );
-        await expect(page.getByPlaceholder("Path or name of ob")).toHaveCount(
-          0,
-          { timeout: 20000 },
-        );
+        await expect(obPathField).toHaveCount(0, { timeout: 20000 });
         await expect(
           page
             .getByTestId("settings-detail-pane")
