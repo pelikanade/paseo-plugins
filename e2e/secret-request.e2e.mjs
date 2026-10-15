@@ -617,3 +617,119 @@ test(
     assert.equal(await exists(fresh), true);
   },
 );
+
+test(
+  "a live instance keeps its handoff directory fresh and repairs one that disappears",
+  { timeout: 300000 },
+  async (t) => {
+    const f = await runtime(t);
+    await f.install("secret-request");
+    const agent = await f.createAgent(f.temporary, "Handoff liveness E2E");
+    const base = `/dev/shm/paseo-${String(process.getuid())}-secret-request`;
+    const root = await until(
+      async () => {
+        try {
+          const { handoffId } = JSON.parse(
+            await readFile(
+              join(f.home, "plugin-data", "secret-request", "state.json"),
+              "utf8",
+            ),
+          );
+          const directory = join(base, handoffId);
+          await stat(directory);
+          return directory;
+        } catch {
+          return null;
+        }
+      },
+      (value) => value !== null,
+    );
+    const connection = await pluginConnection(f, agent.id);
+    const mcp = new Client({
+      name: "secret-request-liveness",
+      version: "1.0.0",
+    });
+    t.after(() => mcp.close());
+    await mcp.connect(
+      new StreamableHTTPClientTransport(new URL(connection.url), {
+        requestInit: {
+          headers: { Authorization: `Bearer ${connection.token}` },
+        },
+      }),
+    );
+    const items = async () =>
+      (await f.client.fetchAgentTimeline(agent.id)).entries.filter(
+        (entry) =>
+          entry.item.type === "plugin" &&
+          entry.item.pluginId === "secret-request",
+      );
+    const deliver = async (label) => {
+      const pending = mcp.callTool({
+        name: "request_secret",
+        arguments: { label },
+      });
+      pending.catch(() => undefined);
+      const item = await until(
+        async () => (await items()).at(-1),
+        (value) =>
+          value !== undefined &&
+          value.item.data.label === label &&
+          value.item.data.status === "pending",
+      );
+      const result = await f.rpc("secret-request", "secret-request.submit", {
+        agentId: agent.id,
+        requestId: item.item.data.requestId,
+        value: SENTINEL,
+      });
+      await pending;
+      return result;
+    };
+
+    await f.test(
+      "the minute tick keeps the live directory fresh while a second instance sweeps",
+      async () => {
+        const before = (await stat(root)).mtimeMs;
+        await until(
+          () => stat(root).then((stats) => stats.mtimeMs),
+          (value) => value > before,
+          90000,
+        );
+        const abandoned = join(base, randomUUID());
+        const abandonedFile = join(abandoned, randomUUID());
+        const deadline = new Date(Date.now() - TTL_MS - 60000);
+        t.after(() => rm(abandoned, { recursive: true, force: true }));
+        await mkdir(abandoned, { mode: 0o700 });
+        await writeFile(abandonedFile, SENTINEL, { mode: 0o600 });
+        await utimes(abandonedFile, deadline, deadline);
+        await utimes(abandoned, deadline, deadline);
+        const peer = await runtime(t);
+        await peer.install("secret-request");
+        await peer.client.reloadPlugin("secret-request");
+        await until(
+          () => exists(abandoned),
+          (present) => present === false,
+          45000,
+        );
+        assert.equal(await exists(root), true);
+        const delivered = await deliver("Still live");
+        assert.equal(delivered.status, "delivered");
+        assert.equal(dirname(delivered.path), root);
+        assert.equal(await readFile(delivered.path, "utf8"), SENTINEL);
+      },
+    );
+
+    await f.test(
+      "a delivery repairs the directory after it disappears",
+      async () => {
+        await rm(root, { recursive: true, force: true });
+        const delivered = await deliver("After a loss");
+        assert.equal(delivered.status, "delivered");
+        assert.equal(dirname(delivered.path), root);
+        const stats = await stat(root);
+        assert.equal(stats.mode & 0o777, 0o700);
+        assert.equal(stats.uid, process.getuid());
+        assert.equal(await readFile(delivered.path, "utf8"), SENTINEL);
+      },
+    );
+  },
+);
