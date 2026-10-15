@@ -2,6 +2,9 @@ import * as fs from "node:fs";
 import { homedir } from "node:os";
 import * as path from "node:path";
 
+type FsModule = typeof fs;
+type PathModule = typeof path;
+
 export const projectFiles = [
   "devenv.nix",
   "devenv.yaml",
@@ -35,10 +38,10 @@ export function trustPath(env: NodeJS.ProcessEnv = process.env): string {
     "allowed",
   );
 }
-export function createTrustCheck(
-  fs: typeof import("node:fs"),
-  path: typeof import("node:path"),
-) {
+export type TrustCheck = ((root: string, file: string) => boolean) & {
+  mainProject(root: string): string | null;
+};
+export function createTrustCheck(fs: FsModule, path: PathModule): TrustCheck {
   const repository = (root: string) => {
     let current = root;
     for (;;) {

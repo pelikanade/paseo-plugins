@@ -1,10 +1,12 @@
 import assert from "node:assert/strict";
+import { spawn } from "node:child_process";
 import test from "node:test";
 import {
   access,
   cp,
   mkdir,
   readFile,
+  readlink,
   readdir,
   symlink,
   writeFile,
@@ -33,6 +35,95 @@ const persistedAgent = async (home, id) => {
     }
   }
   return null;
+};
+
+const procTable = async () => {
+  const rows = [];
+  for (const name of await readdir("/proc")) {
+    if (!/^\d+$/.test(name)) continue;
+    try {
+      const status = await readFile(`/proc/${name}/status`, "utf8");
+      const parent = /^PPid:\s+(\d+)$/m.exec(status);
+      rows.push({
+        pid: Number(name),
+        parent: parent === null ? null : Number(parent[1]),
+        args: (await readFile(`/proc/${name}/cmdline`, "utf8"))
+          .split("\0")
+          .filter(Boolean),
+      });
+    } catch (error) {
+      if (!["ENOENT", "ESRCH", "EACCES"].includes(error.code)) throw error;
+    }
+  }
+  return rows;
+};
+
+const descendants = async (pid) => {
+  const rows = await procTable();
+  const kept = new Set([pid]);
+  let grew = true;
+  while (grew) {
+    grew = false;
+    for (const row of rows) {
+      if (row.parent === null || !kept.has(row.parent) || kept.has(row.pid))
+        continue;
+      kept.add(row.pid);
+      grew = true;
+    }
+  }
+  return rows.filter((row) => row.pid !== pid && kept.has(row.pid));
+};
+
+const mcpServer = (row) =>
+  /(^|\/)devenv$/.test(row.args[0] ?? "") && row.args[1] === "mcp";
+
+const projectMcpServers = async (directory) => {
+  const found = [];
+  for (const row of await procTable()) {
+    if (!mcpServer(row)) continue;
+    try {
+      if ((await readlink(`/proc/${row.pid}/cwd`)) === directory)
+        found.push(row.pid);
+    } catch (error) {
+      if (!["ENOENT", "ESRCH", "EACCES"].includes(error.code)) throw error;
+    }
+  }
+  return found;
+};
+
+const mcpClient = (child) => {
+  let buffer = "";
+  const pending = new Map();
+  child.stdout.on("data", (chunk) => {
+    buffer += chunk;
+    const lines = buffer.split("\n");
+    buffer = lines.pop() ?? "";
+    for (const line of lines) {
+      if (!line.trim()) continue;
+      const message = JSON.parse(line);
+      const settle = pending.get(message.id);
+      if (settle === undefined) continue;
+      pending.delete(message.id);
+      settle(message);
+    }
+  });
+  let next = 1;
+  return (method, params, timeout = 60000) =>
+    new Promise((resolve, reject) => {
+      const id = next;
+      next += 1;
+      const timer = setTimeout(
+        () => reject(new Error(`${method} timed out`)),
+        timeout,
+      );
+      pending.set(id, (message) => {
+        clearTimeout(timer);
+        resolve(message);
+      });
+      child.stdin.write(
+        `${JSON.stringify({ jsonrpc: "2.0", id, method, params })}\n`,
+      );
+    });
 };
 
 test(
@@ -144,7 +235,13 @@ test(
         assert.match(delivered.config.systemPrompt, /devenv project support:/);
         assert.equal(delivered.config.mcpServers.devenv.type, "stdio");
         assert.deepEqual(delivered.config.mcpServers.devenv.args.slice(-1), [
-          JSON.stringify([project, "devenv", join(f.trust, "allowed")]),
+          JSON.stringify([
+            project,
+            "devenv",
+            join(f.trust, "allowed"),
+            "",
+            300000,
+          ]),
         ]);
       },
     );
@@ -208,6 +305,120 @@ test(
         await expect(
           page.getByText("Environment applied", { exact: true }),
         ).toBeVisible({ timeout: 15000 });
+      },
+    );
+    await f.test(
+      "the devenv MCP server starts on demand, answers tools and stops when unused",
+      async (scenario) => {
+        const settings = await f.rpc("devenv", "settings.devenv.read", {});
+        assert.equal(settings.status, "ready");
+        assert.equal(
+          (
+            await f.rpc("devenv", "settings.devenv.write", {
+              revision: settings.revision,
+              values: { ...settings.values, mcpIdleMs: 5000 },
+            })
+          ).status,
+          "saved",
+        );
+        const lazy = await f.createAgent(project, "MCP E2E");
+        let front;
+        scenario.after(async () => {
+          if (front !== undefined) front.kill("SIGKILL");
+          await f.client.deleteAgent(lazy.id).catch(() => undefined);
+        });
+        const record = await until(
+          () => persistedAgent(f.home, lazy.id),
+          (value) => {
+            const args = value?.config?.mcpServers?.devenv?.args;
+            if (!Array.isArray(args) || typeof args.slice(-1)[0] !== "string")
+              return false;
+            return JSON.parse(args.slice(-1)[0])[3] !== "";
+          },
+        );
+        const server = record.config.mcpServers.devenv;
+        const delivered = JSON.parse(server.args.slice(-1)[0]);
+        assert.equal(delivered[0], project);
+        assert.equal(delivered[4], 5000);
+        for (let index = 0; index < 3; index++)
+          assert.deepEqual(await projectMcpServers(project), []);
+        front = spawn(server.command, server.args, {
+          cwd: f.temporary,
+          env: { ...f.env, ...server.env },
+          detached: true,
+          stdio: ["pipe", "pipe", "pipe"],
+        });
+        const request = mcpClient(front);
+        const started = Date.now();
+        const init = await request(
+          "initialize",
+          {
+            protocolVersion: "2025-06-18",
+            capabilities: {},
+            clientInfo: { name: "e2e", version: "1" },
+          },
+          10000,
+        );
+        assert.equal(init.result.serverInfo.name, "devenv");
+        front.stdin.write(
+          `${JSON.stringify({ jsonrpc: "2.0", method: "notifications/initialized" })}\n`,
+        );
+        const listed = await request("tools/list", {}, 10000);
+        assert.equal(listed.result.tools.length, 8);
+        const names = listed.result.tools.map((tool) => tool.name);
+        assert.ok(names.includes("search_packages"));
+        assert.ok(names.includes("list_processes"));
+        assert.ok(Date.now() - started < 10000);
+        assert.deepEqual(await descendants(front.pid), []);
+        assert.deepEqual(await projectMcpServers(project), []);
+        const processes = await request("tools/call", {
+          name: "list_processes",
+          arguments: {},
+        });
+        assert.match(
+          processes.result.content[0].text,
+          /No native process manager/,
+        );
+        await until(
+          () => descendants(front.pid),
+          (rows) => rows.some(mcpServer),
+        );
+        const search = await request(
+          "tools/call",
+          { name: "search_packages", arguments: { query: "nodejs" } },
+          180000,
+        );
+        const matches = JSON.parse(search.result.content[0].text);
+        assert.ok(matches.length > 0, JSON.stringify(matches));
+        await until(
+          () => descendants(front.pid),
+          (rows) => rows.length === 0,
+          20000,
+        );
+        assert.deepEqual((await request("ping", {}, 10000)).result, {});
+        const respawned = await request("tools/call", {
+          name: "list_processes",
+          arguments: {},
+        });
+        assert.match(
+          respawned.result.content[0].text,
+          /No native process manager/,
+        );
+        await until(
+          () => descendants(front.pid),
+          (rows) => rows.some(mcpServer),
+        );
+        front.stdin.end();
+        await until(
+          () => descendants(front.pid),
+          (rows) => rows.length === 0,
+          20000,
+        );
+        await until(
+          () => projectMcpServers(project),
+          (pids) => pids.length === 0,
+          20000,
+        );
       },
     );
     await f.test(
