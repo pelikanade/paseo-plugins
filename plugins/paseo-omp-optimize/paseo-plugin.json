@@ -1,0 +1,8 @@
+{
+  "id": "paseo-omp-optimize",
+  "name": "OMP optimize",
+  "description": "Shows images that OMP reads directly in the Paseo chat timeline.",
+  "requirements": {
+    "paseo": ">=0.11.2"
+  }
+}
