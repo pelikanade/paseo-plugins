@@ -88,6 +88,21 @@ const seedVault = async (home) => {
     "---\nname: beta\ndescription: Second vault skill\n---\n\nbody beta only\n",
   );
   await writeFile(join(vault, "Skills", "gamma.md"), "no front matter here\n");
+  await writeFile(
+    join(vault, "Skills", "index.md"),
+    "---\ntitle: Skills\ntype: index\n---\n\n# Skills\n",
+  );
+  await mkdir(join(vault, "Skills", "nested", "deep", "references"), {
+    recursive: true,
+  });
+  await writeFile(
+    join(vault, "Skills", "nested", "deep", "SKILL.md"),
+    "---\nname: nested\ndescription: >-\n  Nested vault skill\n  folded over two lines\n---\n\nbody nested only\n",
+  );
+  await writeFile(
+    join(vault, "Skills", "nested", "deep", "references", "detail.md"),
+    "---\nname: detail\ndescription: Reference only\n---\n\nreference body only\n",
+  );
   await symlink("/etc/passwd", join(vault, "escape.md"));
   return vault;
 };
@@ -244,6 +259,9 @@ test(
           "Skills/alpha.md",
           "Skills/beta.md",
           "Skills/gamma.md",
+          "Skills/index.md",
+          "Skills/nested/deep/SKILL.md",
+          "Skills/nested/deep/references/detail.md",
         ]);
 
         const grepped = await call("grep_vault", {
@@ -336,12 +354,17 @@ test(
         );
         assert.doesNotMatch(prompt, /body alpha only/);
         assert.doesNotMatch(prompt, /body beta only/);
+        assert.doesNotMatch(prompt, /body nested only/);
         assert.doesNotMatch(prompt, /gamma/);
-        assert.match(prompt, /glob_vault "Skills\/\*\.md"/);
+        assert.doesNotMatch(prompt, /detail/);
+        assert.match(prompt, /glob_vault "Skills\/\*\*\/SKILL\.md"/);
         const alpha = prompt.indexOf("alpha: First vault skill");
         const beta = prompt.indexOf("beta: Second vault skill");
-        assert.ok(alpha > 0 && beta > alpha, prompt);
-        assert.match(prompt, /read_vault "Skills\/alpha\.md"/);
+        const nested = prompt.indexOf(
+          "nested: Nested vault skill folded over two lines",
+        );
+        assert.ok(alpha > 0 && beta > alpha && nested > beta, prompt);
+        assert.match(prompt, /read_vault "Skills\/nested\/deep\/SKILL\.md"/);
         assert.equal(record.config.mcpServers.obsidian.type, "http");
 
         const view = await until(
@@ -358,7 +381,12 @@ test(
           [
             ["Skills/alpha.md", "injected", "alpha", "First vault skill"],
             ["Skills/beta.md", "injected", "beta", "Second vault skill"],
-            ["Skills/gamma.md", "not_injected", null, null],
+            [
+              "Skills/nested/deep/SKILL.md",
+              "injected",
+              "nested",
+              "Nested vault skill folded over two lines",
+            ],
           ],
         );
 
@@ -400,13 +428,14 @@ test(
     await f.test(
       "a skill added after creation is readable after an agent reload",
       async () => {
-        const delta = "Skills/delta.md";
+        const delta = "Skills/delta/SKILL.md";
+        await mkdir(join(vault, "Skills", "delta"), { recursive: true });
         await writeFile(
           join(vault, delta),
           "---\nname: delta\ndescription: Added later\n---\n\nbody delta only\n",
         );
         await f.cli(["agent", "reload", agent.id]);
-        const listed = await call("glob_vault", { pattern: "Skills/*.md" });
+        const listed = await call("glob_vault", { pattern: "Skills/**/*.md" });
         assert.equal(
           listed.paths.includes(delta),
           true,
@@ -414,7 +443,10 @@ test(
         );
         const deltaBody = await call("read_vault", { path: delta });
         assert.match(deltaBody.text, /body delta only/);
-        await rm(join(vault, delta), { force: true });
+        await rm(join(vault, "Skills", "delta"), {
+          recursive: true,
+          force: true,
+        });
         await until(status, (value) => value.injection.skills.length === 3);
       },
     );
@@ -454,7 +486,17 @@ test(
         });
         assert.deepEqual(
           empty.items.map((entry) => entry.title),
-          ["A", "alpha", "beta", "gamma", "Long note", "Project plan"],
+          [
+            "A",
+            "alpha",
+            "beta",
+            "detail",
+            "gamma",
+            "index",
+            "Long note",
+            "Project plan",
+            "SKILL",
+          ],
         );
       },
     );
@@ -550,11 +592,16 @@ test(
           page.getByText("Second vault skill", { exact: true }),
         ).toBeVisible();
         await expect(
-          page.getByText("Skills/gamma.md", { exact: true }),
+          page.getByText("Nested vault skill folded over two lines", {
+            exact: true,
+          }),
         ).toBeVisible();
         await expect(
+          page.getByText("Skills/gamma.md", { exact: true }),
+        ).toHaveCount(0);
+        await expect(
           page.getByText("Not injected", { exact: true }),
-        ).toBeVisible();
+        ).toHaveCount(0);
 
         await page
           .getByRole("button", { name: "Open settings, Obsidian vault" })

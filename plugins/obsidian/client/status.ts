@@ -53,8 +53,7 @@ export function relativeTime(iso: string | null): string {
   return `${date.toLocaleString("en", { month: "short" })} ${String(date.getDate())}, ${date.toTimeString().slice(0, 5)}`;
 }
 
-export function formatBytes(bytes: number | null): string {
-  if (bytes === null) return "—";
+export function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${String(bytes)} B`;
   const kilobytes = bytes / 1024;
   if (kilobytes < 1024) return `${String(Math.round(kilobytes * 10) / 10)} KB`;
@@ -95,7 +94,6 @@ export const copy = {
   status: {
     injected: "Injected",
     truncated: "Truncated",
-    skipped: "Not injected",
   },
   skillsNone: "No skills in Skills/",
   sections: {

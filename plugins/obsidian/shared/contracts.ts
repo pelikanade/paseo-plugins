@@ -61,14 +61,14 @@ export function repairFor(code: SyncErrorCode): Repair {
   }
 }
 
-const injectionStatusSchema = z.enum(["injected", "not_injected", "truncated"]);
+const injectionStatusSchema = z.enum(["injected", "truncated"]);
 const injectionFileSchema = z.object({
   path: z.string(),
   status: injectionStatusSchema,
-  bytes: z.number().nullable(),
-  modifiedAt: z.string().nullable(),
-  name: z.string().nullable(),
-  description: z.string().nullable(),
+  bytes: z.number(),
+  modifiedAt: z.string(),
+  name: z.string(),
+  description: z.string(),
 });
 export type InjectionFile = z.infer<typeof injectionFileSchema>;
 

@@ -31,8 +31,6 @@ function skillStatus(file: InjectionFile): string {
       return copy.status.injected;
     case "truncated":
       return copy.status.truncated;
-    case "not_injected":
-      return copy.status.skipped;
   }
 }
 
@@ -177,7 +175,7 @@ export function createVaultScreen(openSettings: () => void) {
               rows={skills.map((skill) => ({
                 key: skill.path,
                 cells: [
-                  skill.name ?? skill.path,
+                  skill.name,
                   skill.description,
                   skillStatus(skill),
                   formatBytes(skill.bytes),
