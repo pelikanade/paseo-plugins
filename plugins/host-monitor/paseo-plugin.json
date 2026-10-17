@@ -1,0 +1,8 @@
+{
+  "id": "host-monitor",
+  "name": "Host monitor",
+  "description": "CPU, memory and load average for the Paseo daemon host, in the sidebar footer.",
+  "requirements": {
+    "paseo": ">=0.11.2"
+  }
+}
