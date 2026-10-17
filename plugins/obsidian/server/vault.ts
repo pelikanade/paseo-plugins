@@ -9,7 +9,7 @@ interface VaultEntry {
   modifiedAt: string;
 }
 
-const DENIED_SEGMENTS = [".obsidian", ".trash", "Trash"];
+export const DENIED_SEGMENTS = [".obsidian", ".trash", "Trash"];
 const LIST_LIMIT = 1000;
 export const GLOB_LIMIT = 200;
 export const GREP_MATCH_LIMIT = 100;

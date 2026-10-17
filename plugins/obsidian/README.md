@@ -47,11 +47,13 @@ machine.
 - The `obsidian` MCP server with `list_vault`, `glob_vault`, `grep_vault` and `read_vault`. Paths are
   vault-relative; `.obsidian/`, `.trash/` and `Trash/` are not readable, and symlinks that leave the
   vault are rejected. Every result carries `lastSyncedAt` and `stale`.
-- A prompt block with the vault's instructions and one index line per `Skills/*.md` at the vault root
-  (front-matter `name`, `description`, path), capped at 32 KB per file. The block also tells the agent
-  that the `Skills` folder is the authority and to list it with `glob_vault "Skills/*.md"`; skill bodies
-  stay in the vault and are read on demand with `read_vault`, and a file without front matter is
-  skipped.
+- A prompt block with the vault's instructions and one index line per skill found under `Skills/`
+  (front-matter `name`, `description`, path), capped at 32 KB per file. Skills are discovered
+  recursively: a skill folder's `SKILL.md` at any depth, or a `Skills/*.md` file. The block also
+  tells the agent that the `Skills` folder is the authority and to list it with
+  `glob_vault "Skills/**/SKILL.md"` and `glob_vault "Skills/*.md"`; skill bodies stay in the vault
+  and are read on demand with `read_vault`. A Markdown file without both front-matter fields is not
+  a skill: it is neither injected nor listed, and `references/*.md` resources stay resources.
 
 Both are fixed when an agent is created: the tools read the vault live, so a skill added later is
 readable at once (including after `paseo agent reload`), while its index line appears in the prompt of
@@ -75,11 +77,12 @@ items instead of an error.
 ## Screen and status
 
 The sidebar row **Obsidian vault** opens a screen with the sync state, the last successful sync, the
-tools agents receive, and a table of the vault's skills: each `Skills/*.md` file with its
-front-matter name and description, its injection status and its size. It reads the plugin's local
-copy, so a sync error never empties it. Setup lives in settings, one row per thing that needs
-configuring: the token, the `ob` path (offered only when discovery fails) and the remote vault, where
-**Change vault** and **Sync now** sit beside the selected name.
+tools agents receive, and a table of the vault's skills found recursively under `Skills/`: each skill
+with its front-matter name and description, its injection status and its size. Files that are not
+skills are not listed. It reads the plugin's local copy, so a sync error never empties it. Setup lives
+in settings, one row per thing that needs configuring: the token, the `ob` path (offered only when
+discovery fails) and the remote vault, where **Change vault** and **Sync now** sit beside the selected
+name.
 
 `VaultStatus.sync` reports what the CLI holds, read with `ob sync-config --json`: `pull-only` with an
 empty `configs` list is the enforced read-only configuration.
@@ -90,8 +93,10 @@ empty `configs` list is the enforced read-only configuration.
 - No write tools, no push and no read-write switch in this version. Content-hash locking and the mode
   flip are deferred.
 - No semantic search over tags, front matter or the link graph; `[[wikilinks]]` are not resolved.
-- Skills live in the vault's own `Skills` folder. The plugin writes nothing into the vault and needs no
-  hidden directory there; it reads the folder and nothing else.
+- Skills live in the vault's own `Skills` folder and are read recursively: a skill folder's
+  `SKILL.md` at any depth, or a `Skills/*.md` file, with `name` and `description` front matter. The
+  plugin writes nothing into the vault and needs no hidden directory there; it reads the folder and
+  nothing else.
 - `.obsidian/` is not synced, so the vault's configured trash folder name is unknown: both `.trash/`
   and `Trash/` are refused.
 - An end-to-end encrypted vault cannot be set up: the CLI would need its encryption password and this
