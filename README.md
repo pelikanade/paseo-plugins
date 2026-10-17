@@ -23,6 +23,7 @@ plugins/
   generative-ui/                # Native Chat cards + scoped MCP + agent skill
   host-monitor/                 # Daemon host CPU, memory and load in the sidebar footer
   obsidian/                     # Read-only Obsidian vault: pull-only Sync + vault MCP tools
+  paseo-omp-optimize/           # Renders images that OMP read in the chat timeline
 scripts/
   create-plugin.mjs             # Wraps the pinned Paseo scaffold
 skills/
@@ -120,6 +121,8 @@ The [generative-ui plugin](plugins/generative-ui/README.md) adds native json-ren
 
 The [filler-noise plugin](plugins/filler-noise/README.md) hides assistant rows whose text is only dots, ellipses, or whitespace, such as the `.` DeepSeek models emit on tool-call turns.
 
+The [paseo-omp-optimize plugin](plugins/paseo-omp-optimize/README.md) replaces a finished OMP image read row with the image itself. A timeline transformer recognizes `Read image file [image/...]`, and a daemon RPC reads the original file relative to the agent's working directory. PNG, JPEG, GIF, WebP, AVIF and BMP up to 10 MiB are supported; failures fall back to OMP's original text.
+
 The [host-monitor plugin](plugins/host-monitor/README.md) puts the daemon host's CPU, memory and load average in the sidebar footer. It samples once per second, keeps 60 samples in memory, and refreshes the client every two seconds. Selecting the footer row opens a popover with memory details, 1/5/15 minute load averages, uptime and 60 second sparklines.
 
 The [obsidian plugin](plugins/obsidian/README.md) keeps one Obsidian vault in pull-only sync through the official headless CLI and gives every agent four read-only vault tools, a prompt block from `.paseo/system.md` and `.paseo/skills/*.md`, and an attachment picker. Its default E2E suite provisions `obsidian-headless` when `ob` is not on `PATH`; the real Sync suite needs an account and is kept out of `pnpm test:e2e`:
@@ -134,7 +137,7 @@ The [ESLint configuration](eslint.config.mjs) follows [AsterisMono/obsidian-agen
 
 Use `$paseo-plugin-dev` in an agent that discovers `.agents/skills`, or load [SKILL.md](skills/paseo-plugin-dev/SKILL.md) directly. Its [workflow reference](skills/paseo-plugin-dev/references/development.md) covers local reloads and release preparation.
 
-For distribution, start with the [Paseo publishing guide](https://paseo.sh/docs/plugins/publishing). The devenv, generative-ui, and filler-noise packages release on npm as `@pelikanade/paseo-plugin-<id>` at 0.1.0 under MIT; hello-paseo stays private as the starter, and obsidian stays private while the read-write slice is deferred. Publish one with:
+For distribution, start with the [Paseo publishing guide](https://paseo.sh/docs/plugins/publishing). The devenv, generative-ui, and filler-noise packages release on npm as `@pelikanade/paseo-plugin-<id>` at 0.1.0 under MIT; hello-paseo stays private as the starter, obsidian stays private while the read-write slice is deferred, and paseo-omp-optimize stays private. Publish one with:
 
 ```sh
 pnpm --filter @pelikanade/paseo-plugin-devenv exec npm publish --access public
