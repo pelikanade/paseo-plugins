@@ -54,10 +54,16 @@ machine.
   `glob_vault "Skills/**/SKILL.md"` and `glob_vault "Skills/*.md"`; skill bodies stay in the vault
   and are read on demand with `read_vault`. A Markdown file without both front-matter fields is not
   a skill: it is neither injected nor listed, and `references/*.md` resources stay resources.
+- The same skills are mirrored into `~/.agents/skills/<name>/SKILL.md`, including each skill
+  folder's resource files, so providers that scan that directory list them as native `/name`
+  skills in the composer, including a draft before the first message. Only directories recorded in
+  `$PASEO_HOME/plugin-data/obsidian/skills.json` are owned; an existing directory with the same
+  name is left alone, and a skill name must be lowercase kebab-case. Removing the token or
+  unloading the plugin removes unchanged mirrored files.
 
-Both are fixed when an agent is created: the tools read the vault live, so a skill added later is
-readable at once (including after `paseo agent reload`), while its index line appears in the prompt of
-agents created afterwards.
+The prompt block is fixed when an agent is created; the mirror follows the vault, so a skill added
+later becomes a native slash command after the next successful pull, while its index line appears in
+the prompt of agents created afterwards.
 
 ## Read-only
 
@@ -97,6 +103,9 @@ empty `configs` list is the enforced read-only configuration.
   `SKILL.md` at any depth, or a `Skills/*.md` file, with `name` and `description` front matter. The
   plugin writes nothing into the vault and needs no hidden directory there; it reads the folder and
   nothing else.
+- Native skill copies live in the daemon user's `~/.agents/skills`. A name already owned by another
+  skill is skipped, a name that is not lowercase kebab-case is not mirrored, and only files recorded
+  in the plugin's manifest are removed.
 - `.obsidian/` is not synced, so the vault's configured trash folder name is unknown: both `.trash/`
   and `Trash/` are refused.
 - An end-to-end encrypted vault cannot be set up: the CLI would need its encryption password and this
@@ -107,9 +116,9 @@ empty `configs` list is the enforced read-only configuration.
 ## Tests
 
 `pnpm test:e2e` covers the unconfigured state, the four tools over a seeded vault, escaping paths,
-injection, the picker, the `ob` probe and the whole Web UI flow through a real daemon with no
-credentials. The suite provisions the official `obsidian-headless` package when `ob` is not on
-`PATH`.
+injection, native skill mirroring and the draft slash menu, the picker, the `ob` probe and the whole
+Web UI flow through a real daemon with no credentials. The suite provisions the official
+`obsidian-headless` package when `ob` is not on `PATH`.
 
 Real Sync needs an account, so it lives in a separate suite that fails with a prerequisite error
 instead of skipping:

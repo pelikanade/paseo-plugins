@@ -41,6 +41,7 @@ export class Watcher {
       env: NodeJS.ProcessEnv;
       vaultPath: string;
       token: string | null;
+      onSynced?: () => void;
     },
   ) {}
 
@@ -93,6 +94,7 @@ export class Watcher {
         this.successAt = new Date();
         this.lastError = null;
         this.failures = 0;
+        this.options.onSynced?.();
       } else {
         this.lastError = classifyFailure(output, this.options.token);
         this.failures += 1;
@@ -154,6 +156,7 @@ export class Watcher {
       this.lastError = null;
       this.failures = 0;
       this.pulling = false;
+      this.options.onSynced?.();
       return;
     }
     if (line.startsWith("Downloading") || line.startsWith("Downloaded"))

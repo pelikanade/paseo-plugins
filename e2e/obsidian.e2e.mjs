@@ -114,6 +114,7 @@ test(
     const obBin = await ensureOb(t);
     const f = await runtime(t, {
       tools: ["opencode"],
+      isolateHome: true,
       env: obBin ? { PATH: `${obBin}:${process.env.PATH}` } : {},
     });
     await f.install("obsidian");
@@ -426,6 +427,96 @@ test(
     );
 
     await f.test(
+      "vault skills are mirrored for the draft slash menu",
+      async () => {
+        const mirror = join(f.temporary, "home", ".agents", "skills");
+        await mkdir(join(mirror, "beta"), { recursive: true });
+        await writeFile(join(mirror, "beta", "SKILL.md"), "user beta\n");
+        await writeSettings({ vaultId: "seeded", vaultName: "Work notes" });
+        await f.createAgent(f.temporary, "Obsidian mirror E2E");
+        const alpha = await until(
+          () =>
+            readFile(join(mirror, "alpha", "SKILL.md"), "utf8").catch(
+              () => null,
+            ),
+          (value) => value !== null,
+        );
+        assert.match(alpha, /body alpha only/);
+        assert.match(
+          await readFile(join(mirror, "nested", "SKILL.md"), "utf8"),
+          /body nested only/,
+        );
+        assert.match(
+          await readFile(
+            join(mirror, "nested", "references", "detail.md"),
+            "utf8",
+          ),
+          /reference body only/,
+        );
+        assert.equal(
+          await readFile(join(mirror, "gamma", "SKILL.md"), "utf8").catch(
+            () => null,
+          ),
+          null,
+        );
+        assert.equal(
+          await readFile(join(mirror, "index", "SKILL.md"), "utf8").catch(
+            () => null,
+          ),
+          null,
+        );
+        assert.equal(
+          await readFile(join(mirror, "beta", "SKILL.md"), "utf8"),
+          "user beta\n",
+        );
+        const transient = "Skills/transient/SKILL.md";
+        await mkdir(join(vault, "Skills", "transient"), { recursive: true });
+        await writeFile(
+          join(vault, transient),
+          "---\nname: transient\ndescription: Temporary vault skill\n---\n\nbody transient only\n",
+        );
+        await f.createAgent(f.temporary, "Obsidian mirror add E2E");
+        assert.match(
+          await until(
+            () =>
+              readFile(join(mirror, "transient", "SKILL.md"), "utf8").catch(
+                () => null,
+              ),
+            (value) => value !== null,
+          ),
+          /body transient only/,
+        );
+        await rm(join(vault, "Skills", "transient"), {
+          recursive: true,
+          force: true,
+        });
+        await f.createAgent(f.temporary, "Obsidian mirror remove E2E");
+        await until(
+          () =>
+            readFile(join(mirror, "transient", "SKILL.md"), "utf8").catch(
+              () => null,
+            ),
+          (value) => value === null,
+        );
+        const models = await f.client.listProviderModels("opencode", {
+          cwd: f.temporary,
+        });
+        const model = models.models[0]?.id;
+        assert.ok(model);
+        const listed = await f.client.listCommands({
+          agentId: "draft",
+          draftConfig: { provider: "opencode", cwd: f.temporary, model },
+        });
+        const names = listed.commands.map(
+          (command) => `${command.name}:${command.kind ?? "command"}`,
+        );
+        assert.equal(names.includes("alpha:skill"), true, names.join(","));
+        assert.equal(names.includes("nested:skill"), true, names.join(","));
+        await writeSettings({ vaultId: null, vaultName: null });
+      },
+    );
+
+    await f.test(
       "a skill added after creation is readable after an agent reload",
       async () => {
         const delta = "Skills/delta/SKILL.md";
@@ -563,6 +654,29 @@ test(
           page.getByPlaceholder("Search notes by name or path"),
         ).toHaveCount(0);
         await expect(page.getByText(/Project plan/).first()).toBeVisible();
+
+        const models = await f.client.listProviderModels("opencode", {
+          cwd: f.temporary,
+        });
+        const model = models.models[0];
+        assert.ok(model);
+        await page.getByRole("button", { name: "New tab" }).click();
+        await page.getByText("Agent", { exact: true }).click();
+        await page
+          .getByRole("button", { name: /^Select model/ })
+          .last()
+          .click();
+        await page.getByText("OpenCode", { exact: true }).last().click();
+        await page.getByText(model.label, { exact: true }).last().click();
+        await page
+          .getByPlaceholder(
+            "Message the agent, tag @files, or use /commands and /skills",
+          )
+          .last()
+          .fill("/alpha");
+        await expect(
+          page.getByText("First vault skill", { exact: true }).last(),
+        ).toBeVisible();
 
         await page.getByText("Obsidian vault", { exact: true }).first().click();
         await expect(
@@ -762,6 +876,23 @@ test(
         assert.deepEqual(
           await readdir(vault).catch((error) => error.code),
           "ENOENT",
+        );
+        const mirror = join(f.temporary, "home", ".agents", "skills");
+        assert.equal(
+          await readFile(join(mirror, "alpha", "SKILL.md"), "utf8").catch(
+            () => null,
+          ),
+          null,
+        );
+        assert.equal(
+          await readFile(join(mirror, "nested", "SKILL.md"), "utf8").catch(
+            () => null,
+          ),
+          null,
+        );
+        assert.equal(
+          await readFile(join(mirror, "beta", "SKILL.md"), "utf8"),
+          "user beta\n",
         );
         assert.equal((await call("list_vault", {})).error, "vault_unavailable");
         assert.equal(

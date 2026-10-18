@@ -28,6 +28,7 @@ import {
 } from "./credentials";
 import { Gateway } from "./gateway";
 import { INJECTION_INSTRUCTIONS, Injection } from "./injection";
+import { SkillMirror } from "./mirror";
 import {
   atLeast,
   classifyFailure,
@@ -107,6 +108,11 @@ export function installVault(
     const snapshot = watcher?.snapshot();
     return `${INJECTION_INSTRUCTIONS}\n\nVault "${settings.vaultName ?? "not configured"}" sync mode: ${sync?.mode ?? "not configured"}; last successful sync: ${snapshot?.lastSuccessAt ?? "never"}.`;
   });
+  const mirror = new SkillMirror({
+    sourceRoot: root,
+    skillsRoot: join(homedir(), ".agents", "skills"),
+    manifestPath: join(dataRoot, "skills.json"),
+  });
   const gateway = new Gateway(root, () => {
     const lastSyncedAt = watcher?.snapshot().lastSuccessAt ?? null;
     return {
@@ -121,7 +127,16 @@ export function installVault(
   const apply = async (): Promise<void> => {
     const { location, tooOld } = await locate();
     const vault = settings.vaultId;
-    if (!location || tooOld || !token || !vault) {
+    if (!vault) {
+      await watcher?.stop();
+      watcher = null;
+      sync = null;
+      configuredKey = null;
+      await mirror.clear().catch(console.error);
+      return;
+    }
+    await mirror.reconcile().catch(console.error);
+    if (!location || tooOld || !token) {
       await watcher?.stop();
       watcher = null;
       sync = null;
@@ -165,6 +180,10 @@ export function installVault(
       env,
       vaultPath: root,
       token,
+      onSynced: () => {
+        if (settings.vaultId === null) return;
+        mirror.reconcile().catch(console.error);
+      },
     });
     watcher = active;
     configuredKey = key;
@@ -303,6 +322,7 @@ export function installVault(
     sync = null;
     configuredKey = null;
     injection.invalidate();
+    await mirror.clear().catch(console.error);
     await rm(root, { recursive: true, force: true });
     return { status: "removed" as const };
   });
@@ -343,6 +363,9 @@ export function installVault(
       const [files, connection] = await Promise.all([
         injection.read(),
         gateway.connection(),
+        (settings.vaultId === null ? mirror.clear() : mirror.reconcile()).catch(
+          console.error,
+        ),
       ]);
       return {
         ...request,
@@ -370,6 +393,7 @@ export function installVault(
       for (const cleanup of cleanups) cleanup();
       await unsubscribe();
       await watcher?.stop();
+      await mirror.clear().catch(console.error);
       await gateway.shutdown();
     })();
     return shutdown;
