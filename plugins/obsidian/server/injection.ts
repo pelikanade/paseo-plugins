@@ -5,7 +5,7 @@ import { DENIED_SEGMENTS, readVault } from "./vault";
 
 const INJECTION_BYTES_LIMIT = 32 * 1024;
 const SKILL_FILE_NAME = "SKILL.md";
-const SKILLS_DIRECTORY = "Skills";
+export const SKILLS_DIRECTORY = "Skills";
 
 export const INJECTION_INSTRUCTIONS =
   'The Obsidian vault reached through the obsidian MCP server is read-only: list_vault, glob_vault, grep_vault and read_vault. Its skills are Markdown files in the vault\'s Skills folder with name and description front matter: a skill folder\'s SKILL.md or a Skills/*.md file. List them with glob_vault "Skills/**/SKILL.md" and glob_vault "Skills/*.md", and read a skill with read_vault before using it. Use read_vault to open a note before relying on it, and prefer grep_vault to find the right note. Every result carries lastSyncedAt and stale; when stale is true the local copy may be behind the remote. Paths are vault-relative, and .obsidian and the trash folders are not readable.';
@@ -15,7 +15,7 @@ interface InjectionState {
   block: string;
 }
 
-function frontMatter(text: string): {
+export function frontMatter(text: string): {
   name?: string;
   description?: string;
 } {
@@ -65,6 +65,28 @@ function isSkillPath(path: string): boolean {
   return name === SKILL_FILE_NAME || directory === SKILLS_DIRECTORY;
 }
 
+export async function discoverSkillPaths(root: string): Promise<string[]> {
+  const found: string[] = [];
+  const queue: string[] = [SKILLS_DIRECTORY];
+  while (queue.length > 0) {
+    const directory = queue.shift() ?? "";
+    const entries = await readdir(join(root, directory), {
+      withFileTypes: true,
+    }).catch(() => []);
+    for (const entry of entries) {
+      if (DENIED_SEGMENTS.includes(entry.name)) continue;
+      const child = `${directory}/${entry.name}`;
+      if (entry.isDirectory()) {
+        queue.push(child);
+        continue;
+      }
+      if (!entry.isFile() && !entry.isSymbolicLink()) continue;
+      if (isSkillPath(child)) found.push(child);
+    }
+  }
+  return found.sort((left, right) => left.localeCompare(right));
+}
+
 export class Injection {
   private cache: { expires: number; value: InjectionState } | null = null;
 
@@ -84,32 +106,10 @@ export class Injection {
     this.cache = null;
   }
 
-  private async paths(): Promise<string[]> {
-    const found: string[] = [];
-    const queue: string[] = [SKILLS_DIRECTORY];
-    while (queue.length > 0) {
-      const directory = queue.shift() ?? "";
-      const entries = await readdir(join(this.root, directory), {
-        withFileTypes: true,
-      }).catch(() => []);
-      for (const entry of entries) {
-        if (DENIED_SEGMENTS.includes(entry.name)) continue;
-        const child = `${directory}/${entry.name}`;
-        if (entry.isDirectory()) {
-          queue.push(child);
-          continue;
-        }
-        if (!entry.isFile() && !entry.isSymbolicLink()) continue;
-        if (isSkillPath(child)) found.push(child);
-      }
-    }
-    return found.sort((left, right) => left.localeCompare(right));
-  }
-
   private async build(): Promise<InjectionState> {
     const skills: InjectionFile[] = [];
     const lines: string[] = [];
-    for (const path of await this.paths()) {
+    for (const path of await discoverSkillPaths(this.root)) {
       const result = await readVault(this.root, path, INJECTION_BYTES_LIMIT);
       if (result.status !== "ok") continue;
       const meta = frontMatter(result.text);
