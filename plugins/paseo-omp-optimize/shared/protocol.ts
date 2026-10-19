@@ -2,7 +2,10 @@ import { z } from "zod";
 
 export const TIMELINE_KIND = "read-image";
 export const TIMELINE_VERSION = 1;
+export const INTENT_KIND = "omp-intent";
+export const INTENT_VERSION = 1;
 export const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
+export const MAX_INTENT_LENGTH = 16384;
 
 export const imageMimeTypeSchema = z.enum([
   "image/png",
@@ -25,6 +28,15 @@ export const readImageItemSchema = z
   .strict();
 
 export type ReadImageItem = z.infer<typeof readImageItemSchema>;
+
+export const intentItemSchema = z
+  .object({
+    callId: z.string().min(1).max(1024),
+    intent: z.string().min(1).max(MAX_INTENT_LENGTH),
+  })
+  .strict();
+
+export type IntentItem = z.infer<typeof intentItemSchema>;
 
 export const imageReadMarker =
   /^Read image file \[(?<declaredMimeType>image\/[a-z0-9.+-]+)\]/i;

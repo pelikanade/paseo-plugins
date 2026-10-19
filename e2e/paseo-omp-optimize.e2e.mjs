@@ -4,11 +4,11 @@ import { copyFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import test from "node:test";
 import { expect } from "@playwright/test";
-import { command, root, runtime } from "./support/runtime.mjs";
+import { command, root, runtime, until } from "./support/runtime.mjs";
 
 test(
-  "paseo-omp-optimize renders images read by an OMP session",
-  { timeout: 240000 },
+  "paseo-omp-optimize projects OMP intents and renders OMP images",
+  { timeout: 360000 },
   async (t) => {
     const f = await runtime(t, {
       providers: { omp: { enabled: true } },
@@ -150,10 +150,11 @@ test(
       },
     );
 
+    const page = await f.openBrowser();
+
     await f.test(
       "the timeline replaces the OMP read row with the rendered image",
       async () => {
-        const page = await f.openBrowser();
         await page.goto(f.url);
         await page.getByText("project", { exact: true }).last().click();
         await page.goto(
@@ -176,6 +177,114 @@ test(
           { width: 32, height: 24 },
         );
         await expect(row.getByText(/^Read image file /)).toHaveCount(0);
+      },
+    );
+
+    await f.test(
+      "the transcript projects intents from a live OMP turn",
+      async () => {
+        const liveCwd = join(f.temporary, "live-project");
+        await mkdir(liveCwd, { recursive: true });
+        await writeFile(
+          join(liveCwd, "intent-target.txt"),
+          "intent projection\n",
+        );
+        const live = await f.client.createAgent({
+          config: {
+            provider: "omp",
+            cwd: liveCwd,
+            model: model.selector,
+            modeId: "full",
+          },
+          initialPrompt:
+            "Use the read tool to read intent-target.txt, then reply with exactly DONE.",
+        });
+        assert.ok(live.workspaceId, JSON.stringify(live));
+        const finished = await f.client.waitForFinish(live.id, 180000);
+        assert.equal(finished.status, "idle", JSON.stringify(finished));
+        let intentRows;
+        try {
+          intentRows = await until(
+            async () => {
+              const timeline = await f.client.fetchAgentTimeline(live.id, {
+                direction: "tail",
+                limit: 200,
+              });
+              return timeline.entries.filter(
+                (entry) =>
+                  entry.item.type === "plugin" &&
+                  entry.item.kind === "omp-intent",
+              );
+            },
+            (entries) => entries.length > 0,
+            30000,
+          );
+        } catch (error) {
+          throw new Error(
+            `The live OMP turn did not produce a projected intent; the scenario needs a chat model that follows a read instruction. ${error instanceof Error ? error.message : String(error)}`,
+          );
+        }
+        const fetched = await f.client.fetchAgent(live.id);
+        const sessionPath = fetched?.agent.persistence?.nativeHandle;
+        assert.ok(sessionPath, "The live OMP agent has no session file");
+        const expectedByCallId = new Map();
+        for (const line of (await readFile(sessionPath, "utf8")).split("\n")) {
+          let entry;
+          try {
+            entry = JSON.parse(line);
+          } catch {
+            continue;
+          }
+          if (entry.type === "message" && entry.message?.role === "assistant") {
+            for (const content of entry.message.content ?? []) {
+              if (
+                content.type === "toolCall" &&
+                typeof content.id === "string" &&
+                typeof content.intent === "string"
+              ) {
+                expectedByCallId.set(content.id, content.intent);
+              }
+            }
+          }
+          if (
+            entry.type === "custom" &&
+            entry.customType === "tool_execution_start" &&
+            typeof entry.data?.toolCallId === "string" &&
+            typeof entry.data.intent === "string"
+          ) {
+            expectedByCallId.set(entry.data.toolCallId, entry.data.intent);
+          }
+        }
+        assert.ok(expectedByCallId.size > 0);
+        for (const entry of intentRows) {
+          assert.equal(
+            entry.item.data.intent,
+            expectedByCallId.get(entry.item.data.callId),
+          );
+        }
+        const timeline = await f.client.fetchAgentTimeline(live.id, {
+          direction: "tail",
+          limit: 200,
+        });
+        const toolRow = timeline.entries.find(
+          (entry) =>
+            entry.item.type === "tool_call" &&
+            entry.item.callId === intentRows[0].item.data.callId,
+        );
+        assert.ok(toolRow, JSON.stringify(timeline.entries));
+        assert.ok(intentRows[0].seqStart > toolRow.seqStart);
+        await page.goto(f.url);
+        await page.getByText("live-project", { exact: true }).last().click();
+        await page.goto(
+          page
+            .url()
+            .replace(/\/workspace\/[^/?]+/, `/workspace/${live.workspaceId}`),
+        );
+        const row = page.getByTestId("paseo-omp-intent").first();
+        await expect(row).toBeVisible();
+        await expect(
+          row.getByText(intentRows[0].item.data.intent),
+        ).toBeVisible();
       },
     );
   },
