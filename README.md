@@ -45,8 +45,10 @@ The root `paseo.json` configures [Paseo worktree hooks](https://paseo.sh/docs/wo
 
 - **Setup:** `bash scripts/worktree-setup.sh` enters devenv and installs dependencies with `pnpm install --frozen-lockfile`.
 - **Teardown:** `bash scripts/worktree-teardown.sh` removes the worktree's root and plugin `node_modules`, `.devenv`, and `.direnv`. It refuses to run in the primary checkout and skips symlinked plugin directories.
+- **Refresh plugins:** the `refresh-plugins` toolbar action fast-forwards the primary checkout's `main` from `origin/main`, runs `pnpm install --frozen-lockfile` when dependency manifests changed, then reloads every enabled directory plugin installed from that checkout's `plugins/` directory. It refuses to update a checkout that is not on `main`, and skips disabled plugins.
+- **Install plugins:** the `install-plugins` toolbar action fast-forwards the primary checkout's `main`, runs `pnpm install --frozen-lockfile`, lists repository plugins whose manifest ID is not installed, and installs the one selected by number. It refuses to update a checkout that is not on `main`.
 
-The daemon machine needs Nix and devenv available on its `PATH`. Both hooks resolve the checkout from their own script location, so they can also be invoked from another directory. Teardown can be repeated; Paseo removes the worktree directory after it completes.
+The daemon machine needs Nix, devenv, jq, and the Paseo CLI available on its `PATH`. The hooks and both plugin scripts resolve the checkout themselves, so they can also be invoked from another directory. Teardown can be repeated; Paseo removes the worktree directory after it completes.
 
 Commit `paseo.json` and these scripts to the base branch used for new worktrees. Paseo reads that committed version, so uncommitted lifecycle changes do not apply to newly created worktrees.
 
