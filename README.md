@@ -23,7 +23,7 @@ plugins/
   generative-ui/                # Native Chat cards + scoped MCP + agent skill
   host-monitor/                 # Daemon host CPU, memory and load in the sidebar footer
   obsidian/                     # Read-only Obsidian vault: pull-only Sync + vault MCP tools
-  paseo-omp-optimize/           # Renders images that OMP read in the chat timeline
+  paseo-omp-optimize/           # Closes OMP-specific fidelity gaps in Paseo (tool intents, image reads)
 scripts/
   create-plugin.mjs             # Wraps the pinned Paseo scaffold
 skills/
@@ -123,7 +123,7 @@ The [generative-ui plugin](plugins/generative-ui/README.md) adds native json-ren
 
 The [filler-noise plugin](plugins/filler-noise/README.md) hides assistant rows whose text is only dots, ellipses, or whitespace, such as the `.` DeepSeek models emit on tool-call turns.
 
-The [paseo-omp-optimize plugin](plugins/paseo-omp-optimize/README.md) replaces a finished OMP image read row with the image itself. A timeline transformer recognizes `Read image file [image/...]`, and a daemon RPC reads the original file relative to the agent's working directory. PNG, JPEG, GIF, WebP, AVIF and BMP up to 10 MiB are supported; failures fall back to OMP's original text.
+The [paseo-omp-optimize plugin](plugins/paseo-omp-optimize/README.md) improves the OMP experience inside Paseo by closing OMP-specific gaps in Paseo's generic session and timeline model. It projects OMP's per-tool-call `intent` into the transcript by tailing the live session file and appending a row after the matching tool row. It also replaces a finished OMP image read row with the image itself: a timeline transformer recognizes `Read image file [image/...]`, and a daemon RPC reads the original file relative to the agent's working directory. PNG, JPEG, GIF, WebP, AVIF and BMP up to 10 MiB are supported; failures fall back to OMP's original text.
 
 The [host-monitor plugin](plugins/host-monitor/README.md) puts the daemon host's CPU, memory and load average in the sidebar footer. It samples once per second, keeps 60 samples in memory, and refreshes the client every two seconds. Selecting the footer row opens a popover with memory details, 1/5/15 minute load averages, uptime and 60 second sparklines.
 

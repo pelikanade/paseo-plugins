@@ -32,6 +32,16 @@ What recent merged work got wrong, and the rule that would have caught it. Rules
 - Evidence: `docs/known-issues/0001-e2e-browser-needs-fontconfig.md` (added in `e6e3916`, 2026-10-14) says "Fix is an environment variable, outside this repository's code"; `devenv.nix` has set `FONTCONFIG_FILE` since `34c7c09` (2026-10-13), and a ready session has it set.
 - Seen 1× (10-14)
 
+## Host UI integration
+
+**Read the host's layout source before styling a plugin contribution to a native surface.**
+
+- Why: Paseo gives unflagged plugin rows a 16px stream gap while tool, thought and todo rows share a 32px rhythm; guessing produced three spacing revisions, and plugin-side negative margins then broke consecutive rows and the turn-footer gap.
+- Lens: standards · Kind: judgement
+- Evidence: session `e2fd98a1-eb59-4927-9854-433ca3e8e2fb` (2026-10-19), transcript `~/.omp/agent/sessions/-.paseo-worktrees-3hx8ogr2-blissful-crocodile/2026-10-19T02-19-22-205Z_01a151f4-d4dd-70e7-bb61-46eb3a371171.jsonl` — three user reports after the first intent row shipped. Paseo `packages/app/src/agent-stream/spacing.ts` (`getGapBetweenStreamItems`: tool sequence 0, otherwise `SPACING[4]`) and `packages/app/src/agent-stream/view.tsx` (`StreamItemWrapper` applies the gap) define the contract.
+- Done right on 10-19: the host added `sequence: "tool"` on plugin timeline items; `plugins/paseo-omp-optimize/server/intent.ts` appends flagged rows and `client/intent.tsx` overrides no host spacing, so the row joins the native tool sequence and keeps the normal footer margin.
+- Seen 1× (10-19)
+
 ## Proposed checks
 
 - **CI runs `pnpm check` on every PR.** No PR in the window had a check; PR #8 merged with "Verification: Not run in this change." Proposed 2026-10-18; owner decision.

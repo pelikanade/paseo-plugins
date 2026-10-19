@@ -11,3 +11,11 @@ Use [skills/paseo-plugin-dev/SKILL.md](skills/paseo-plugin-dev/SKILL.md) for plu
 - Repository setup does not authorize changing daemon configuration or publishing packages.
 - Preserve the supplied ESLint rules: strict type-aware checks, exhaustive switches, no unsafe assertions, no floating promises (including `void`), and no source comments.
 - Before changing code, read [LESSONS.md](LESSONS.md): what recent merged work got wrong and the rule that would have caught it. Review changes against [docs/code-standards.md](docs/code-standards.md).
+
+## paseo-omp-optimize
+
+Root purpose: improve the OMP experience inside Paseo by closing OMP-specific fidelity gaps in Paseo's generic session and timeline model. An OMP session in Paseo must not be worse than running OMP directly.
+
+- The purpose covers presentation fidelity (OMP output shown as OMP produced it) and capability fidelity (tools, context and interaction available to the OMP session). The current implementation covers presentation only: it restores images from finished OMP `Read` rows and projects per-tool-call OMP intents into the transcript.
+- Admit only OMP-specific behavior that Paseo's generic integration drops, flattens, or makes costlier. General Paseo UI improvements, other providers, and defects OMP itself should fix do not belong in this plugin.
+- Judge additions against observed OMP sessions, not a wishlist. Record the gap and its evidence before broadening the plugin.

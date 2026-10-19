@@ -2,6 +2,12 @@ import { defineRpc } from "@getpaseo/plugin";
 import { z } from "zod";
 import { MAX_IMAGE_BYTES, imageMimeTypeSchema } from "./protocol";
 
+export const syncIntentWatchersRpc = defineRpc({
+  name: "paseo-omp-optimize.sync-intent-watchers",
+  input: z.object({}).strict(),
+  output: z.object({}).strict(),
+});
+
 export const readImageRpc = defineRpc({
   name: "paseo-omp-optimize.read-image",
   input: z

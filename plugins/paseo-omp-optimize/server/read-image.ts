@@ -129,5 +129,5 @@ export default function contribute(server: PluginServerContext) {
       fileName: basename(filePath),
     };
   });
-  return () => {};
+  return async () => {};
 }
