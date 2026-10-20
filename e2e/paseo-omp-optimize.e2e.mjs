@@ -287,5 +287,218 @@ test(
         ).toBeVisible();
       },
     );
+
+    await f.test(
+      "keeps image rows keyed apart while scrolling virtualized history",
+      async () => {
+        const scrollCwd = join(f.temporary, "scroll-project");
+        await mkdir(scrollCwd, { recursive: true });
+        const dimensions = [
+          [320, 240],
+          [240, 640],
+          [500, 100],
+          [120, 900],
+          [400, 500],
+          [700, 220],
+        ];
+        const timestamp = "2026-10-18T00:00:00.000Z";
+        const sessionId = "0190f0e0-0000-7000-8000-000000000003";
+        const sessionFile = join(f.temporary, "scroll-session.jsonl");
+        const specs = Array.from({ length: 36 }, (_, index) => {
+          const image = index % 6 === 3;
+          const imageIndex = Math.floor(index / 6);
+          const [width, height] = dimensions[imageIndex % dimensions.length];
+          return {
+            id: `scroll_call_${index}`,
+            file: image ? `shot-${imageIndex}.png` : `note-${index}.txt`,
+            image,
+            width,
+            height,
+          };
+        });
+        for (const spec of specs) {
+          const target = join(scrollCwd, spec.file);
+          if (spec.image) {
+            await copyFile(sourceImage, target);
+          } else {
+            await writeFile(target, `note ${spec.file}\n`);
+          }
+        }
+        const entries = [
+          {
+            type: "session",
+            version: 3,
+            id: sessionId,
+            timestamp,
+            cwd: scrollCwd,
+          },
+          {
+            type: "model_change",
+            id: "model",
+            parentId: null,
+            timestamp,
+            model: model.selector,
+          },
+          {
+            type: "message",
+            id: "user",
+            parentId: "model",
+            timestamp,
+            message: {
+              role: "user",
+              content: [{ type: "text", text: "Read the files" }],
+            },
+          },
+          {
+            type: "message",
+            id: "assistant",
+            parentId: "user",
+            timestamp,
+            message: {
+              role: "assistant",
+              content: specs.map((spec) => ({
+                type: "toolCall",
+                id: spec.id,
+                name: "read",
+                arguments: { path: spec.file },
+              })),
+            },
+          },
+        ];
+        let parentId = "assistant";
+        for (const spec of specs) {
+          entries.push({
+            type: "message",
+            id: `result_${spec.id}`,
+            parentId,
+            timestamp,
+            message: {
+              role: "toolResult",
+              toolCallId: spec.id,
+              toolName: "read",
+              content: spec.image
+                ? [
+                    {
+                      type: "text",
+                      text: `Read image file [image/png]\n[Image: original ${spec.width}x${spec.height}, displayed at ${spec.width}x${spec.height}. Multiply coordinates by 1.00 to map to original image.]`,
+                    },
+                    {
+                      type: "image",
+                      data: "blob:sha256:0000",
+                      mimeType: "image/png",
+                    },
+                  ]
+                : [{ type: "text", text: `note ${spec.file}` }],
+              details: {},
+            },
+          });
+          parentId = `result_${spec.id}`;
+        }
+        entries.push(
+          {
+            type: "message",
+            id: "user2",
+            parentId,
+            timestamp,
+            message: {
+              role: "user",
+              content: [{ type: "text", text: "Next" }],
+            },
+          },
+          {
+            type: "message",
+            id: "assistant2",
+            parentId: "user2",
+            timestamp,
+            message: {
+              role: "assistant",
+              content: [{ type: "text", text: "Done" }],
+            },
+          },
+        );
+        await writeFile(
+          sessionFile,
+          `${entries.map((entry) => JSON.stringify(entry)).join("\n")}\n`,
+        );
+        const scrollAgent = await f.client.importAgent({
+          provider: "omp",
+          sessionId: sessionFile,
+          cwd: scrollCwd,
+        });
+        const failures = [];
+        page.on("pageerror", (error) => {
+          failures.push(error.message);
+        });
+        page.on("console", (message) => {
+          if (message.type() === "error") failures.push(message.text());
+        });
+        await page.setViewportSize({ width: 1280, height: 420 });
+        await page.addInitScript(() => {
+          globalThis.__PASEO_E2E_WEB_PARTIAL_VIRTUALIZATION_THRESHOLD = 1;
+          globalThis.__PASEO_E2E_WEB_MOUNTED_RECENT_STREAM_ITEMS = 1;
+        });
+        await page.goto(f.url);
+        await page.getByText("scroll-project", { exact: true }).last().click();
+        await page.goto(
+          page
+            .url()
+            .replace(
+              /\/workspace\/[^/?]+/,
+              `/workspace/${scrollAgent.workspaceId}`,
+            ),
+        );
+        const scroll = page.getByTestId("agent-chat-scroll");
+        await expect(scroll).toBeVisible();
+        await page.waitForTimeout(2000);
+        let widest = [];
+        let virtualized = false;
+        for (let step = 0; step < 80; step += 1) {
+          const box = await scroll.boundingBox();
+          if (box) {
+            await page.mouse.move(
+              box.x + box.width / 2,
+              box.y + box.height / 2,
+            );
+          }
+          await page.mouse.wheel(0, -300);
+          await page.waitForTimeout(120);
+          const observed = await scroll.evaluate((node) =>
+            Array.from(
+              node.querySelectorAll(
+                '[data-history-row-id^="paseo-omp-optimize/"]',
+              ),
+              (row) => row.getAttribute("data-history-row-id"),
+            ),
+          );
+          if (observed.length > widest.length) widest = observed;
+          if (
+            (await scroll.getAttribute("id")) ===
+            "agent-chat-scroll-web-dom-virtualized"
+          ) {
+            virtualized = true;
+          }
+          if ((await scroll.evaluate((node) => node.scrollTop)) === 0) break;
+        }
+        assert.ok(virtualized, "history never entered the virtualized lane");
+        assert.ok(
+          widest.length >= 2,
+          `only saw rows ${JSON.stringify(widest)}`,
+        );
+        assert.equal(
+          new Set(widest).size,
+          widest.length,
+          `duplicate plugin row ids: ${JSON.stringify(widest)}`,
+        );
+        assert.ok(
+          widest.every((id) => id?.startsWith("paseo-omp-optimize/")),
+          JSON.stringify(widest),
+        );
+        await expect(
+          page.getByTestId("paseo-omp-read-image").first(),
+        ).toBeVisible();
+        assert.deepEqual(failures, []);
+        await expect(scroll).toBeAttached();
+      },
+    );
   },
 );

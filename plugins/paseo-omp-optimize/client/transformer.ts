@@ -25,7 +25,6 @@ export const readImageTransformer: PluginTimelineTransformerContribution<"tool_c
         items: [
           {
             type: "plugin",
-            id: "read-image",
             kind: TIMELINE_KIND,
             version: TIMELINE_VERSION,
             data: {
